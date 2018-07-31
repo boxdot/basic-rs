@@ -1,0 +1,6 @@
+[package]
+name = "basic-rs"
+version = "0.1.0"
+authors = ["boxdot <d@zerovolt.org>", "jeschkies <k@jeschkies.xyz>"]
+
+[dependencies]
