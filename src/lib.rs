@@ -38,6 +38,6 @@ fn handle_remaining(remaining: CompleteStr) -> Result<(), Error> {
 pub fn execute(input: &str) -> Result<String, Error> {
     let (remaining, ast) = parser::program(CompleteStr(input))?;
     handle_remaining(remaining)?;
-    let output = interpreter::evaluate(&ast);
+    let output = interpreter::evaluate(&ast?);
     Ok(output)
 }

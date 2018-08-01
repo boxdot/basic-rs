@@ -1,3 +1,5 @@
+use error::Error;
+
 #[derive(Debug)]
 pub enum Digit {
     D0,
@@ -15,6 +17,23 @@ pub enum Digit {
 #[derive(Debug)]
 pub struct Program {
     pub blocks: Vec<Block>,
+}
+
+impl Program {
+    pub fn new(blocks: Vec<Block>, end_statement: Option<Statement>) -> Result<Program, Error> {
+        if let Some(_) = end_statement {
+            Ok(Program { blocks })
+        } else {
+            Err(Error::MissingEnd {
+                line_number: blocks
+                    .last()
+                    .map(|b| match b {
+                        Block::Line { line_number, .. } => *line_number,
+                    })
+                    .unwrap_or(0u16),
+            })
+        }
+    }
 }
 
 #[derive(Debug)]

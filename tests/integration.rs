@@ -45,6 +45,15 @@ fn run_and_compare_output(program_path: &str, expected_path: &str, expected_erro
                 diff(&stderr, &expected_error)
             );
         }
+        Err(e @ BasicError::MissingEnd { .. }) => {
+            let stderr = format!("{}", e);
+            assert_eq!(
+                stderr,
+                expected_error,
+                "\nDiff:\n{}\n",
+                diff(&stderr, &expected_error)
+            );
+        }
         Err(e) => assert!(false, "Unexpected error: {}", e),
     }
 }
@@ -62,4 +71,9 @@ fn test_p002() {
 #[test]
 fn test_p003() {
     run_and_compare_output("tests/P003.BAS", "tests/P003.ok", "tests/P003.eok");
+}
+
+#[test]
+fn test_p004() {
+    run_and_compare_output("tests/P004.BAS", "tests/P004.ok", "tests/P004.eok");
 }

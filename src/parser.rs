@@ -1,4 +1,5 @@
 use ast::*;
+use error::Error;
 
 use nom::types::CompleteStr;
 use nom::{eol, space};
@@ -61,10 +62,10 @@ named!(end_line<CompleteStr, Statement>,
         (Statement::End)
     ));
 
-named!(pub program<CompleteStr, Program>,
+named!(pub program<CompleteStr, Result<Program, Error>>,
     do_parse!(
         blocks: many0!(terminated!(block, end_of_line)) >>
-        end_line >>
+        end_statement: opt!(end_line) >>
         opt!(end_of_line) >>
-        (Program{ blocks })
+        (Program::new(blocks, end_statement))
     ));

@@ -9,6 +9,8 @@ pub enum Error {
     Parser(String),
     #[fail(display = "Syntax error: {}", msg)]
     Syntax { msg: String, stderr: String },
+    #[fail(display = "{}: error: program must have an END statement \n", line_number)]
+    MissingEnd { line_number: u16 },
 }
 
 impl<'a> convert::From<nom::Err<CompleteStr<'a>>> for Error {
