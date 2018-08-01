@@ -20,9 +20,28 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn new(blocks: Vec<Block>, end_statement: Option<Statement>) -> Result<Program, Error> {
-        if let Some(_) = end_statement {
-            Ok(Program { blocks })
+    pub fn new(blocks: Vec<Block>) -> Result<Program, Error> {
+        let end_statement_pos = blocks.iter().position(|b| match b {
+            Block::Line {
+                statement: Statement::End,
+                ..
+            } => true,
+            _ => false,
+        });
+
+        if let Some(end_statement_pos) = end_statement_pos {
+            if end_statement_pos + 1 != blocks.len() {
+                let line_numbers = blocks.into_iter().skip(end_statement_pos + 1).map(
+                    |b| match b {
+                        Block::Line { line_number, .. } => line_number,
+                    },
+                );
+                Err(Error::StatementsAfterEnd {
+                    line_numbers: line_numbers.collect(),
+                })
+            } else {
+                Ok(Program { blocks })
+            }
         } else {
             Err(Error::MissingEnd {
                 line_number: blocks

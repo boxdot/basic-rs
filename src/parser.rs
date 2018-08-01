@@ -36,9 +36,15 @@ named!(print_statement<CompleteStr, Statement>,
             ).collect() }))
     ));
 
+named!(end_statement<CompleteStr, Statement>,
+    do_parse!(
+        tag!("END") >>
+        (Statement::End)
+    ));
+
 named!(statement<CompleteStr, Statement>,
     do_parse!(
-        statement: print_statement >>
+        statement: alt!(print_statement | end_statement) >>
         (statement)));
 
 named!(pub block<CompleteStr, Block>,
@@ -51,21 +57,9 @@ named!(pub block<CompleteStr, Block>,
 
 named!(end_of_line<CompleteStr, CompleteStr>, alt!(eof!() | eol));
 
-named!(end_statement<CompleteStr, CompleteStr>,
-    tag!("END"));
-
-named!(end_line<CompleteStr, Statement>,
-    do_parse!(
-        line_number >>
-        sep!(space, end_statement) >>
-        opt!(space) >>
-        (Statement::End)
-    ));
-
 named!(pub program<CompleteStr, Result<Program, Error>>,
     do_parse!(
         blocks: many0!(terminated!(block, end_of_line)) >>
-        end_statement: opt!(end_line) >>
         opt!(end_of_line) >>
-        (Program::new(blocks, end_statement))
+        (Program::new(blocks))
     ));

@@ -2,8 +2,6 @@ extern crate basic;
 extern crate diff;
 extern crate failure;
 
-use basic::Error as BasicError;
-
 use failure::Error;
 
 use std::fs::File;
@@ -37,15 +35,7 @@ fn run_and_compare_output(program_path: &str, expected_path: &str, expected_erro
     let res = basic::execute(&input);
     match res {
         Ok(output) => assert_eq!(output, expected, "\nDiff:\n{}\n", diff(&output, &expected)),
-        Err(BasicError::Syntax { stderr, .. }) => {
-            assert_eq!(
-                stderr,
-                expected_error,
-                "\nDiff:\n{}\n",
-                diff(&stderr, &expected_error)
-            );
-        }
-        Err(e @ BasicError::MissingEnd { .. }) => {
+        Err(e) => {
             let stderr = format!("{}", e);
             assert_eq!(
                 stderr,
@@ -54,7 +44,6 @@ fn run_and_compare_output(program_path: &str, expected_path: &str, expected_erro
                 diff(&stderr, &expected_error)
             );
         }
-        Err(e) => assert!(false, "Unexpected error: {}", e),
     }
 }
 
