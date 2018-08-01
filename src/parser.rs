@@ -16,7 +16,7 @@ fn from_decimal(input: CompleteStr) -> Result<u16, num::ParseIntError> {
     u16::from_str_radix(&input, 10)
 }
 
-named!(line_number<CompleteStr, u16>,
+named!(pub line_number<CompleteStr, u16>,
     map_res!(take_while_m_n!(1, 4, is_digit), from_decimal));
 
 named!(string_constant<CompleteStr, StringConstant>,
@@ -40,7 +40,7 @@ named!(statement<CompleteStr, Statement>,
         statement: print_statement >>
         (statement)));
 
-named!(block<CompleteStr, Block>,
+named!(pub block<CompleteStr, Block>,
     do_parse!(
         line_number: line_number >>
         statement: sep!(space, statement) >>
@@ -65,5 +65,6 @@ named!(pub program<CompleteStr, Program>,
     do_parse!(
         blocks: many0!(terminated!(block, end_of_line)) >>
         end_line >>
+        opt!(end_of_line) >>
         (Program{ blocks })
     ));

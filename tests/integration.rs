@@ -2,6 +2,8 @@ extern crate basic;
 extern crate diff;
 extern crate failure;
 
+use basic::Error as BasicError;
+
 use failure::Error;
 
 use std::fs::File;
@@ -26,14 +28,38 @@ fn diff(from: &str, to: &str) -> String {
     diff_lines.join("\n")
 }
 
-#[test]
-fn test_p001() {
-    let input = read_to_string("tests/P001.BAS").expect("failed to read test program");
-    let expected = read_to_string("tests/P001.ok").expect("failed to read expected output");
+fn run_and_compare_output(program_path: &str, expected_path: &str, expected_error: &str) {
+    let input = read_to_string(program_path).expect("failed to read test program");
+    let expected = read_to_string(expected_path).expect("failed to read expected output");
+    let expected_error =
+        read_to_string(expected_error).expect("failed to read expected error output");
 
     let res = basic::execute(&input);
-    assert!(res.is_ok());
-    let output = res.unwrap();
+    match res {
+        Ok(output) => assert_eq!(output, expected, "\nDiff:\n{}\n", diff(&output, &expected)),
+        Err(BasicError::Syntax { stderr, .. }) => {
+            assert_eq!(
+                stderr,
+                expected_error,
+                "\nDiff:\n{}\n",
+                diff(&stderr, &expected_error)
+            );
+        }
+        Err(e) => assert!(false, "Unexpected error: {}", e),
+    }
+}
 
-    assert_eq!(output, expected, "\nDiff:\n{}\n", diff(&output, &expected));
+#[test]
+fn test_p001() {
+    run_and_compare_output("tests/P001.BAS", "tests/P001.ok", "tests/P001.eok");
+}
+
+#[test]
+fn test_p002() {
+    run_and_compare_output("tests/P002.BAS", "tests/P002.ok", "tests/P002.eok");
+}
+
+#[test]
+fn test_p003() {
+    run_and_compare_output("tests/P003.BAS", "tests/P003.ok", "tests/P003.eok");
 }
