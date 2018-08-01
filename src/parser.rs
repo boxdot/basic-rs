@@ -28,11 +28,11 @@ named!(string_constant<CompleteStr, StringConstant>,
 named!(print_statement<CompleteStr, Statement>,
     do_parse!(
         tag!("PRINT") >>
-        string_constant: opt!(sep!(space, string_constant)) >>
-        (Statement::Print(PrintStatement{ list: string_constant.map(
-            |s| vec![PrintItem::Expression(
+        string_constants: many0!(sep!(space, string_constant)) >>
+        (Statement::Print(PrintStatement{ list: string_constants.into_iter().map(
+            |s| PrintItem::Expression(
                 Expression::String(StringExpression::Constant(s)))
-            ]).unwrap_or_else(|| vec![]) }))
+            ).collect() }))
     ));
 
 named!(statement<CompleteStr, Statement>,
