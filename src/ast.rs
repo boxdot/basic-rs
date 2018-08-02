@@ -66,6 +66,7 @@ pub enum Block {
 #[derive(Debug)]
 pub enum Statement {
     Print(PrintStatement),
+    Stop,
     End,
 }
 

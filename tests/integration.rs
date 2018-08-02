@@ -49,20 +49,45 @@ fn run_and_compare_output(program_path: &str, expected_path: &str, expected_erro
 
 #[test]
 fn test_p001() {
-    run_and_compare_output("tests/P001.BAS", "tests/P001.ok", "tests/P001.eok");
+    run_and_compare_output(
+        "tests/suite/P001.BAS",
+        "tests/suite/P001.ok",
+        "tests/suite/P001.eok",
+    );
 }
 
 #[test]
 fn test_p002() {
-    run_and_compare_output("tests/P002.BAS", "tests/P002.ok", "tests/P002.eok");
+    run_and_compare_output(
+        "tests/suite/P002.BAS",
+        "tests/suite/P002.ok",
+        "tests/suite/P002.eok",
+    );
 }
 
 #[test]
 fn test_p003() {
-    run_and_compare_output("tests/P003.BAS", "tests/P003.ok", "tests/P003.eok");
+    run_and_compare_output(
+        "tests/suite/P003.BAS",
+        "tests/suite/P003.ok",
+        "tests/suite/P003.eok",
+    );
 }
 
 #[test]
 fn test_p004() {
-    run_and_compare_output("tests/P004.BAS", "tests/P004.ok", "tests/P004.eok");
+    run_and_compare_output(
+        "tests/suite/P004.BAS",
+        "tests/suite/P004.ok",
+        "tests/suite/P004.eok",
+    );
+}
+
+#[test]
+fn test_p005() {
+    run_and_compare_output(
+        "tests/suite/P005.BAS",
+        "tests/suite/P005.ok",
+        "tests/suite/P005.eok",
+    );
 }

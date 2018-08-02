@@ -36,6 +36,12 @@ named!(print_statement<CompleteStr, Statement>,
             ).collect() }))
     ));
 
+named!(stop_statement<CompleteStr, Statement>,
+    do_parse!(
+        tag!("STOP") >>
+        (Statement::Stop)
+    ));
+
 named!(end_statement<CompleteStr, Statement>,
     do_parse!(
         tag!("END") >>
@@ -44,7 +50,7 @@ named!(end_statement<CompleteStr, Statement>,
 
 named!(statement<CompleteStr, Statement>,
     do_parse!(
-        statement: alt!(print_statement | end_statement) >>
+        statement: alt!(print_statement | stop_statement | end_statement) >>
         (statement)));
 
 named!(pub block<CompleteStr, Block>,
