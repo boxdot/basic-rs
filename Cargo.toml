@@ -8,4 +8,4 @@ failure = "0.1"
 nom = "4.0"
 
 [dev-dependencies]
-diff = "*"
+diff = "0.1"
