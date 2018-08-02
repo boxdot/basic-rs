@@ -6,12 +6,10 @@ use std::fmt;
 
 #[derive(Debug, Fail)]
 pub enum Error {
-    // #[fail(display = "Parser error: {}", _0)]
     Parser(String),
-    // #[fail(display = "Syntax error")]
     StatementsAfterEnd { line_numbers: Vec<u16> },
-    // #[fail(display = "{}: error: program must have an END statement \n", line_number)]
     MissingEnd { line_number: u16 },
+    InvalidTabCall,
 }
 
 impl<'a> convert::From<nom::Err<CompleteStr<'a>>> for Error {
@@ -35,6 +33,7 @@ impl fmt::Display for Error {
                 "{}: error: program must have an END statement \n",
                 line_number
             ),
+            Error::InvalidTabCall => write!(f, "error: invalid TAB call"),
         }
     }
 }

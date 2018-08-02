@@ -91,3 +91,12 @@ fn test_p005() {
         "tests/suite/P005.eok",
     );
 }
+
+#[test]
+fn test_p006() {
+    run_and_compare_output(
+        "tests/suite/P006.BAS",
+        "tests/suite/P006.ok",
+        "tests/suite/P006.eok",
+    );
+}

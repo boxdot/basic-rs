@@ -1,18 +1,6 @@
 use error::Error;
 
-#[derive(Debug)]
-pub enum Digit {
-    D0,
-    D1,
-    D2,
-    D3,
-    D4,
-    D5,
-    D6,
-    D7,
-    D8,
-    D9,
-}
+use std::ops;
 
 #[derive(Debug)]
 pub struct Program {
@@ -66,6 +54,7 @@ pub enum Block {
 #[derive(Debug)]
 pub enum Statement {
     Print(PrintStatement),
+    Let(LetStatement),
     Stop,
     End,
 }
@@ -78,6 +67,32 @@ pub enum Constant {
     String(StringConstant),
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Sign {
+    Pos,
+    Neg,
+}
+
+impl ops::Mul<f64> for Sign {
+    type Output = f64;
+    fn mul(self, val: f64) -> Self::Output {
+        match self {
+            Sign::Pos => val,
+            Sign::Neg => -val,
+        }
+    }
+}
+
+impl ops::Mul<i32> for Sign {
+    type Output = i32;
+    fn mul(self, val: i32) -> Self::Output {
+        match self {
+            Sign::Pos => val,
+            Sign::Neg => -val,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct StringConstant(pub String);
 
@@ -86,7 +101,7 @@ pub struct StringConstant(pub String);
 
 #[derive(Debug)]
 pub enum NumericVariable {
-    Simple { letter: char, digit: Option<Digit> },
+    Simple { letter: char, digit: Option<u16> },
 }
 
 #[derive(Debug)]
@@ -109,7 +124,67 @@ pub enum Expression {
 }
 
 #[derive(Debug)]
-pub struct NumericExpression;
+pub struct NumericExpression {
+    pub terms: Vec<(Sign, Term)>,
+}
+
+impl NumericExpression {
+    pub fn new(sign: Option<char>, term: Term, mut terms: Vec<(Option<char>, Term)>) -> Self {
+        let mut all_terms = vec![(
+            sign.map(|c| match c {
+                '-' => Sign::Neg,
+                _ => Sign::Pos,
+            }).unwrap_or(Sign::Pos),
+            term,
+        )];
+        all_terms.extend(terms.into_iter().map(|(c, t)| {
+            let c = match c {
+                Some('-') => Sign::Neg,
+                _ => Sign::Pos,
+            };
+            (c, t)
+        }));
+        Self { terms: all_terms }
+    }
+}
+
+#[derive(Debug)]
+pub struct Term {
+    pub factor: Factor,
+    pub factors: Vec<(Multiplier, Factor)>,
+}
+
+impl Term {
+    pub fn new(factor: Factor, factors: Vec<(Multiplier, Factor)>) -> Self {
+        Self { factor, factors }
+    }
+}
+
+#[derive(Debug)]
+pub struct Factor {
+    pub primaries: Vec<Primary>,
+}
+
+impl Factor {
+    pub fn new(primary: Primary, mut factors: Vec<Primary>) -> Self {
+        let mut primaries = vec![primary];
+        primaries.append(&mut factors);
+        Self { primaries }
+    }
+}
+
+#[derive(Debug)]
+pub enum Multiplier {
+    Mul,
+    Div,
+}
+
+#[derive(Debug)]
+pub enum Primary {
+    Variable(NumericVariable),
+    Constant(f64),
+    Expression(NumericExpression),
+}
 
 #[derive(Debug)]
 pub enum StringExpression {
@@ -134,7 +209,21 @@ pub enum Function {
     Tan(f64),
 }
 
-// 14. Print statement
+// 11. LET statement
+
+#[derive(Debug)]
+pub enum LetStatement {
+    Numeric {
+        variable: NumericVariable,
+        expression: NumericExpression,
+    },
+    String {
+        variable: StringVariable,
+        expression: StringExpression,
+    },
+}
+
+// 14. PRINT statement
 
 #[derive(Debug)]
 pub struct PrintStatement {
@@ -145,4 +234,23 @@ pub struct PrintStatement {
 pub enum PrintItem {
     Expression(Expression),
     TabCall(NumericExpression),
+    Comma,
+    Semicolon,
+}
+
+pub fn new_print_items(
+    items: Vec<(Option<PrintItem>, PrintItem)>,
+    trailing_item: Option<PrintItem>,
+) -> Vec<PrintItem> {
+    let mut res = Vec::new();
+    for (item, sep) in items {
+        if let Some(item) = item {
+            res.push(item);
+        }
+        res.push(sep);
+    }
+    if let Some(item) = trailing_item {
+        res.push(item);
+    }
+    res
 }
