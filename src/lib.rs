@@ -2,6 +2,7 @@
 extern crate nom;
 #[macro_use]
 extern crate failure;
+extern crate itertools;
 
 use nom::types::CompleteStr;
 
@@ -12,7 +13,7 @@ mod parser;
 
 pub use error::Error;
 
-pub fn execute(input: &str) -> Result<String, Error> {
+pub fn execute(input: &str) -> Result<(String, String), Error> {
     let (remaining, ast) = parser::program(CompleteStr(input))?;
     if !remaining.is_empty() {
         return Err(Error::Parser(format!(
@@ -20,6 +21,5 @@ pub fn execute(input: &str) -> Result<String, Error> {
             remaining
         )));
     }
-    let output = interpreter::evaluate(&ast?)?;
-    Ok(output)
+    interpreter::evaluate(&ast?)
 }

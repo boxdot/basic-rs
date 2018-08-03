@@ -1,5 +1,6 @@
 use error::Error;
 
+use std::fmt::{self, Write};
 use std::ops;
 
 #[derive(Debug)]
@@ -104,8 +105,28 @@ pub enum NumericVariable {
     Simple { letter: char, digit: Option<u8> },
 }
 
+impl fmt::Display for NumericVariable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            NumericVariable::Simple { letter, digit } => {
+                f.write_char(*letter)?;
+                if let Some(digit) = digit {
+                    write!(f, "{}", digit)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct StringVariable(pub char);
+
+impl fmt::Display for StringVariable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}$", self.0)
+    }
+}
 
 #[derive(Debug)]
 pub enum Variable {

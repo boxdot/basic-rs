@@ -1,5 +1,6 @@
 use ast::*;
 use error::Error;
+use itertools::Itertools;
 
 use std::collections::HashMap;
 
@@ -9,47 +10,58 @@ struct State {
     string_values: HashMap<StringVariable, String>,
 }
 
-fn evaluate_primary(primary: &Primary) -> f64 {
-    match primary {
-        Primary::Variable(_) => unimplemented!(),
+fn evaluate_numeric_variable(variable: &NumericVariable, state: &State) -> Result<f64, Error> {
+    state
+        .numeric_values
+        .get(variable)
+        .map(|value| *value)
+        .ok_or_else(|| Error::UndefinedNumericVariable(*variable))
+}
+
+fn evaluate_primary(primary: &Primary, state: &State) -> Result<f64, Error> {
+    let value = match primary {
+        Primary::Variable(v) => evaluate_numeric_variable(v, state)?,
         Primary::Constant(c) => *c,
-        Primary::Expression(e) => evaluate_numeric_expression(e),
-    }
+        Primary::Expression(e) => evaluate_numeric_expression(e, state)?,
+    };
+    Ok(value)
 }
 
-fn evaluate_factor(factor: &Factor) -> f64 {
-    let mut primaries = factor.primaries.iter();
-    let first_primary = primaries.next().expect("logic error");
-    primaries.fold(evaluate_primary(first_primary), |acc, primary| {
-        acc.powf(evaluate_primary(primary))
-    })
+fn evaluate_factor(factor: &Factor, state: &State) -> Result<f64, Error> {
+    let mut primaries = factor.primaries.iter().map(|p| evaluate_primary(p, state));
+    let first_primary = primaries.next().expect("logic error")?;
+    primaries.fold_results(first_primary, |acc, primary| acc.powf(primary))
 }
 
-fn evaluate_term(term: &Term) -> f64 {
-    term.factors.iter().fold(
-        evaluate_factor(&term.factor),
-        |acc, (multiplier, factor)| {
-            let factor = evaluate_factor(&factor);
-            match multiplier {
-                Multiplier::Mul => acc * factor,
-                Multiplier::Div => acc / factor,
-            }
-        },
-    )
+fn evaluate_term(term: &Term, state: &State) -> Result<f64, Error> {
+    let first_factor = evaluate_factor(&term.factor, state)?;
+    term.factors
+        .iter()
+        .map(|(m, f)| evaluate_factor(f, state).map(|f| (m, f)))
+        .fold_results(first_factor, |acc, (multiplier, factor)| match multiplier {
+            Multiplier::Mul => acc * factor,
+            Multiplier::Div => acc / factor,
+        })
 }
 
-fn evaluate_numeric_expression(expression: &NumericExpression) -> f64 {
+fn evaluate_numeric_expression(
+    expression: &NumericExpression,
+    state: &State,
+) -> Result<f64, Error> {
     expression
         .terms
         .iter()
-        .fold(0.0, |acc, (sign, term)| acc + *sign * evaluate_term(term))
+        .map(|(sign, term)| evaluate_term(term, state).map(|term| (sign, term)))
+        .fold_results(0.0, |acc, (sign, term)| acc + *sign * term)
 }
 
 // TODO: Replace output with a Writer.
 fn evaluate_print(
+    line_number: u16,
     statement: &PrintStatement,
     state: &State,
     output: &mut String,
+    err_output: &mut String,
 ) -> Result<(), Error> {
     const COLUMN_WIDTH: usize = 70;
     const NUM_PRINT_ZONES: usize = 5;
@@ -67,12 +79,17 @@ fn evaluate_print(
                 Expression::Numeric(_) => unimplemented!(),
             },
             PrintItem::TabCall(numeric_expression) => {
-                let tab_width = evaluate_numeric_expression(numeric_expression) as usize;
-                if tab_width == 0 {
-                    return Err(Error::InvalidTabCall);
+                let tab_width =
+                    evaluate_numeric_expression(numeric_expression, state)?.round() as i64;
+                if tab_width < 1 {
+                    *err_output += &format!(
+                        "{}: warning: invalid TAB argument ({})\n",
+                        line_number, tab_width
+                    );
+                    continue;
                 }
 
-                let tab_width = tab_width % COLUMN_WIDTH;
+                let tab_width = (tab_width as usize) % COLUMN_WIDTH;
                 if tab_width < columnar_position {
                     output.push('\n');
                     columnar_position = 0;
@@ -132,7 +149,7 @@ fn evaluate_let(statement: &LetStatement, state: &mut State) -> Result<(), Error
             variable,
             expression,
         } => {
-            let value = evaluate_numeric_expression(expression);
+            let value = evaluate_numeric_expression(expression, state)?;
             state.numeric_values.insert(*variable, value);
         }
         LetStatement::String {
@@ -149,13 +166,15 @@ fn evaluate_let(statement: &LetStatement, state: &mut State) -> Result<(), Error
 
 // Return value `true` means evalution should continue.
 fn evaluate_statement(
+    line_number: u16,
     statement: &Statement,
     state: &mut State,
     output: &mut String,
+    err_output: &mut String,
 ) -> Result<bool, Error> {
     let res = match statement {
         Statement::Print(statement) => {
-            evaluate_print(statement, state, output)?;
+            evaluate_print(line_number, statement, state, output, err_output)?;
             true
         }
         Statement::Let(statement) => {
@@ -168,17 +187,29 @@ fn evaluate_statement(
     Ok(res)
 }
 
-pub fn evaluate(program: &Program) -> Result<String, Error> {
+pub fn evaluate(program: &Program) -> Result<(String, String), Error> {
     let mut state = State::default();
     let mut output = String::new();
+    let mut err_output = String::new();
+
     for block in &program.blocks {
         match block {
-            Block::Line { statement, .. } => {
-                if !evaluate_statement(statement, &mut state, &mut output)? {
+            Block::Line {
+                line_number,
+                statement,
+            } => {
+                if !evaluate_statement(
+                    *line_number,
+                    statement,
+                    &mut state,
+                    &mut output,
+                    &mut err_output,
+                )? {
                     break;
                 }
             }
         }
     }
-    Ok(output)
+
+    Ok((output, err_output))
 }

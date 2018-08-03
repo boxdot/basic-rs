@@ -34,7 +34,15 @@ fn run_and_compare_output(program_path: &str, expected_path: &str, expected_erro
 
     let res = basic::execute(&input);
     match res {
-        Ok(output) => assert_eq!(output, expected, "\nDiff:\n{}\n", diff(&output, &expected)),
+        Ok((output, err_output)) => {
+            assert_eq!(output, expected, "\nDiff:\n{}\n", diff(&output, &expected));
+            assert_eq!(
+                err_output,
+                expected_error,
+                "\nDiff:\n{}\n",
+                diff(&err_output, &expected_error)
+            );
+        }
         Err(e) => {
             let stderr = format!("{}", e);
             assert_eq!(
