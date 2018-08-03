@@ -40,6 +40,8 @@ fn evaluate_numeric_expression(expression: &NumericExpression) -> f64 {
 // TODO: Replace output with a Writer.
 fn evaluate_print(statement: &PrintStatement, output: &mut String) -> Result<(), Error> {
     const COLUMN_WIDTH: usize = 70;
+    const NUM_PRINT_ZONES: usize = 5;
+    const PRINT_ZONE_WIDTH: usize = COLUMN_WIDTH / NUM_PRINT_ZONES;
 
     let mut columnar_position = 0;
     for item in &statement.list {
@@ -69,7 +71,16 @@ fn evaluate_print(statement: &PrintStatement, output: &mut String) -> Result<(),
                 *output += &" ".repeat(tab_width - 1);
                 columnar_position += tab_width - 1;
             }
-            PrintItem::Comma => *output += "\t",
+            PrintItem::Comma => {
+                let current_print_zone = columnar_position / PRINT_ZONE_WIDTH;
+                if current_print_zone + 1 < NUM_PRINT_ZONES {
+                    let next_columnar_position = (current_print_zone + 1) * PRINT_ZONE_WIDTH;
+                    *output += &" ".repeat(next_columnar_position - columnar_position);
+                    columnar_position = next_columnar_position;
+                } else {
+                    output.push('\n');
+                }
+            }
             PrintItem::Semicolon => (),
         }
     }
