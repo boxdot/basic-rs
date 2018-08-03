@@ -8,19 +8,18 @@ use std::num;
 
 // 4. Syntax
 
-fn is_letter(c: char) -> bool {
-    match c {
-        'A'..='Z' => true,
-        _ => false,
-    }
-}
-
 fn is_digit(c: char) -> bool {
     match c {
         '0'..='9' => true,
         _ => false,
     }
 }
+
+named!(letter<CompleteStr, char>,
+    one_of!("ABCDEFGHIJKLMNOPQRSTUVWXYZ"));
+
+named!(digit<CompleteStr, u8>,
+    map!(one_of!("0123456789"), |c| c as u8 - '0' as u8));
 
 // 6. Constants
 
@@ -79,18 +78,13 @@ named!(numeric_variable<CompleteStr, NumericVariable>,
 
 named!(simple_numeric_variable<CompleteStr, NumericVariable>,
     do_parse!(
-        letter: take_while_m_n!(1, 1, is_letter) >>
-        digit: opt!(map_res!(take_while_m_n!(1, 1, is_digit), from_decimal)) >>
-        (NumericVariable::Simple {
-            letter: letter.chars().next().unwrap(), digit })
+        letter: letter >>
+        digit: opt!(digit) >>
+        (NumericVariable::Simple { letter, digit })
     ));
 
 named!(string_variable<CompleteStr, StringVariable>,
-    do_parse!(
-        letter: take_while_m_n!(1, 1, is_letter) >>
-        tag!("$") >>
-        (StringVariable { letter: letter.chars().next().unwrap() })
-    ));
+    map!(terminated!(letter, char!('$')), StringVariable));
 
 // 8. Expressions
 
@@ -110,16 +104,11 @@ named!(string_expression<CompleteStr, StringExpression>,
 
 named!(numeric_expression<CompleteStr, NumericExpression>,
     do_parse!(
-        leading_sign: opt!(char!('-')) >>
+        leading_sign: opt!(sign) >>
         leading_term: term >>
-        terms: many0!(pair!(opt!(char!('-')), term)) >>
+        terms: many0!(pair!(sign, term)) >>
         (NumericExpression::new(leading_sign, leading_term, terms))
     ));
-//     map_res!(take_while_m_n!(1, 10, is_digit),
-//     |_| -> Result<NumericExpression, ()> {
-//         Ok(NumericExpression)
-//     })
-// );
 
 named!(term<CompleteStr, Term>,
     do_parse!(
@@ -143,9 +132,9 @@ named!(multiplier<CompleteStr, Multiplier>,
 
 named!(primary<CompleteStr, Primary>,
     alt!(
-        map!(numeric_variable, Primary::Variable) |
-        map!(numeric_rep, Primary::Constant) |
-        map!(delimited!(char!('('), numeric_expression, char!(')')), Primary::Expression)
+        // map!(numeric_variable, Primary::Variable) |
+        map!(numeric_rep, Primary::Constant)
+        // map!(delimited!(char!('('), numeric_expression, char!(')')), Primary::Expression)
     ));
 
 // 11. LET statement

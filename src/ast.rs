@@ -101,13 +101,11 @@ pub struct StringConstant(pub String);
 
 #[derive(Debug)]
 pub enum NumericVariable {
-    Simple { letter: char, digit: Option<u16> },
+    Simple { letter: char, digit: Option<u8> },
 }
 
 #[derive(Debug)]
-pub struct StringVariable {
-    pub letter: char,
-}
+pub struct StringVariable(pub char);
 
 #[derive(Debug)]
 pub enum Variable {
@@ -129,21 +127,9 @@ pub struct NumericExpression {
 }
 
 impl NumericExpression {
-    pub fn new(sign: Option<char>, term: Term, mut terms: Vec<(Option<char>, Term)>) -> Self {
-        let mut all_terms = vec![(
-            sign.map(|c| match c {
-                '-' => Sign::Neg,
-                _ => Sign::Pos,
-            }).unwrap_or(Sign::Pos),
-            term,
-        )];
-        all_terms.extend(terms.into_iter().map(|(c, t)| {
-            let c = match c {
-                Some('-') => Sign::Neg,
-                _ => Sign::Pos,
-            };
-            (c, t)
-        }));
+    pub fn new(sign: Option<Sign>, term: Term, mut terms: Vec<(Sign, Term)>) -> Self {
+        let mut all_terms = vec![(sign.unwrap_or(Sign::Pos), term)];
+        all_terms.append(&mut terms);
         Self { terms: all_terms }
     }
 }

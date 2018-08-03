@@ -10,10 +10,11 @@ fn evaluate_primary(primary: &Primary) -> f64 {
 }
 
 fn evaluate_factor(factor: &Factor) -> f64 {
-    factor
-        .primaries
-        .iter()
-        .fold(1.0, |acc, primary| acc.powf(evaluate_primary(primary)))
+    let mut primaries = factor.primaries.iter();
+    let first_primary = primaries.next().expect("logic error");
+    primaries.fold(evaluate_primary(first_primary), |acc, primary| {
+        acc.powf(evaluate_primary(primary))
+    })
 }
 
 fn evaluate_term(term: &Term) -> f64 {
@@ -36,6 +37,7 @@ fn evaluate_numeric_expression(expression: &NumericExpression) -> f64 {
         .fold(0.0, |acc, (sign, term)| acc + *sign * evaluate_term(term))
 }
 
+// TODO: Replace output with a Writer.
 fn evaluate_print(statement: &PrintStatement, output: &mut String) -> Result<(), Error> {
     const COLUMN_WIDTH: usize = 70;
 
@@ -64,7 +66,7 @@ fn evaluate_print(statement: &PrintStatement, output: &mut String) -> Result<(),
                     columnar_position = 0;
                 }
 
-                *output = " ".repeat(tab_width - 1);
+                *output += &" ".repeat(tab_width - 1);
                 columnar_position += tab_width - 1;
             }
             PrintItem::Comma => *output += "\t",
