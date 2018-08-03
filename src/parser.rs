@@ -166,30 +166,11 @@ named!(string_let_statement<CompleteStr, LetStatement>,
 
 // 14. PRINT statement
 
-named!(tab_call<CompleteStr, PrintItem>,
-    map!(
-        delimited!(tag!("TAB("), numeric_expression, char!(')')),
-        PrintItem::TabCall
-    ));
-
-named!(print_item<CompleteStr, PrintItem>,
-    alt!(
-        // Note: expression consumes T of TAB, therefore tab_call needs to be parsed first.
-        tab_call |
-        map!(expression, PrintItem::Expression)
-    ));
-
-named!(print_item_comma<CompleteStr, PrintItem>,
-    map!(char!(','), |_| PrintItem::Comma));
-
-named!(print_item_semicolon<CompleteStr, PrintItem>,
-    map!(char!(';'), |_| PrintItem::Semicolon));
-
-named!(print_separator<CompleteStr, PrintItem>,
+named!(print_statement<CompleteStr, Statement>,
     do_parse!(
-        many0!(space) >>
-        sep: alt!(print_item_comma | print_item_semicolon) >>
-        (sep)
+        tag!("PRINT") >>
+        print_list: opt!(sep!(space, print_list)) >>
+        (Statement::Print(PrintStatement{ list: print_list.unwrap_or_else(Vec::new) }))
     ));
 
 named!(print_list<CompleteStr, Vec<PrintItem>>,
@@ -199,12 +180,24 @@ named!(print_list<CompleteStr, Vec<PrintItem>>,
         (new_print_items(items, trailing_item))
     ));
 
-named!(print_statement<CompleteStr, Statement>,
-    do_parse!(
-        tag!("PRINT") >>
-        print_list: opt!(sep!(space, print_list)) >>
-        (Statement::Print(PrintStatement{ list: print_list.unwrap_or_else(Vec::new) }))
+named!(print_item<CompleteStr, PrintItem>,
+    alt!(
+        // Note: expression consumes T of TAB, therefore tab_call needs to be parsed first.
+        tab_call |
+        map!(expression, PrintItem::Expression)
     ));
+
+named!(tab_call<CompleteStr, PrintItem>,
+    map!(
+        delimited!(tag!("TAB("), numeric_expression, char!(')')),
+        PrintItem::TabCall
+    ));
+
+named!(print_separator<CompleteStr, PrintItem>,
+    preceded!(many0!(space), alt!(
+        char!(',') => { |_| PrintItem::Comma } |
+        char!(';') => { |_| PrintItem::Semicolon }
+    )));
 
 // Program
 
