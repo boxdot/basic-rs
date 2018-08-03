@@ -1,3 +1,5 @@
+use ast::StringVariable;
+
 use nom;
 use nom::types::CompleteStr;
 
@@ -10,6 +12,7 @@ pub enum Error {
     StatementsAfterEnd { line_numbers: Vec<u16> },
     MissingEnd { line_number: u16 },
     InvalidTabCall,
+    UndefinedStringVariable(StringVariable),
 }
 
 impl<'a> convert::From<nom::Err<CompleteStr<'a>>> for Error {
@@ -34,6 +37,9 @@ impl fmt::Display for Error {
                 line_number
             ),
             Error::InvalidTabCall => write!(f, "error: invalid TAB call"),
+            Error::UndefinedStringVariable(ref variable) => {
+                write!(f, "error: unknown string variable '{}$'", variable.0)
+            }
         }
     }
 }

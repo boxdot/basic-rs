@@ -99,12 +99,12 @@ pub struct StringConstant(pub String);
 // 7. Variable
 // TODO: numeric-array-element is missing
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum NumericVariable {
     Simple { letter: char, digit: Option<u8> },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct StringVariable(pub char);
 
 #[derive(Debug)]
