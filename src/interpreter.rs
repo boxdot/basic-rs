@@ -55,6 +55,27 @@ fn evaluate_numeric_expression(
         .fold_results(0.0, |acc, (sign, term)| acc + *sign * term)
 }
 
+fn format_numeric_experssion(_expression: &NumericExpression, value: f64) -> String {
+    if value == 0.0 {
+        return String::from(" 0 ");
+    }
+
+    let sign_str = if value.is_sign_positive() { ' ' } else { '-' };
+
+    let value_str = format!("{}", value.abs());
+    let mut parts = value_str.split('.');
+    let integ_str = parts.next().unwrap();
+    let fract_str = parts.next().unwrap_or("");
+
+    format!(
+        "{}{}{}{} ",
+        sign_str,
+        if integ_str != "0" { integ_str } else { "" },
+        if !fract_str.is_empty() { "." } else { "" },
+        fract_str
+    )
+}
+
 // TODO: Replace output with a Writer.
 fn evaluate_print(
     line_number: u16,
@@ -76,7 +97,12 @@ fn evaluate_print(
                     *output += &value;
                     columnar_position += value.len();
                 }
-                Expression::Numeric(_) => unimplemented!(),
+                Expression::Numeric(numeric_expression) => {
+                    let value = evaluate_numeric_expression(numeric_expression, state)?;
+                    let value_str = format_numeric_experssion(numeric_expression, value);
+                    *output += &value_str;
+                    columnar_position += value_str.len();
+                }
             },
             PrintItem::TabCall(numeric_expression) => {
                 let tab_width =

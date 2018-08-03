@@ -153,6 +153,14 @@ impl NumericExpression {
         all_terms.append(&mut terms);
         Self { terms: all_terms }
     }
+
+    pub fn with_constant(value: f64) -> Self {
+        NumericExpression::new(
+            Some(if value >= 0.0 { Sign::Pos } else { Sign::Neg }),
+            Term::new(Factor::new(Primary::Constant(value.abs()), vec![]), vec![]),
+            vec![],
+        )
+    }
 }
 
 #[derive(Debug, PartialEq)]

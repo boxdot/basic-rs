@@ -42,17 +42,20 @@ named!(numeric_rep<CompleteStr, f64>,
 
 named!(significand<CompleteStr, f64>,
     alt!(
-        pair!(integer, opt!(char!('.'))) => { |(i, _)| i as f64 } |
         pair!(opt!(integer), fraction) => {
-            |(integral, frac): (Option<u64>, u64)| u64_from_parts(integral.unwrap_or(0), frac)
+            |(integral, frac): (Option<u64>, f64)| integral.unwrap_or(0) as f64 + frac
         }
+        | pair!(integer, opt!(char!('.'))) => { |(i, _)| i as f64 }
     ));
 
 named!(integer<CompleteStr, u64>,
     map_res!(take_while1!(is_digit), u64_from_decimal));
 
-named!(fraction<CompleteStr, u64>,
-    map_res!(preceded!(char!('.'), take_while1!(is_digit)), u64_from_decimal));
+named!(fraction<CompleteStr, f64>,
+    map_res!(preceded!(char!('.'), take_while1!(is_digit)),
+        |s| u64_from_decimal(s).map(|frac| {
+            frac as f64 / (10_u64.pow(s.len() as u32) as f64)
+        })));
 
 named!(exrad<CompleteStr, i32>,
     map!(
@@ -213,14 +216,6 @@ fn i32_from_decimal(input: CompleteStr) -> Result<i32, num::ParseIntError> {
     i32::from_str_radix(&input, 10)
 }
 
-fn u64_from_parts(integral: u64, fractional: u64) -> f64 {
-    let mut fractional = fractional as f64;
-    while fractional >= 1.0 {
-        fractional /= 10.;
-    }
-    integral as f64 + fractional
-}
-
 named!(line_number<CompleteStr, u16>,
     map_res!(take_while_m_n!(1, 4, is_digit), from_decimal));
 
@@ -266,7 +261,7 @@ mod tests {
     fn test_tab_call() {
         let res = tab_call(CompleteStr("TAB(24)"));
         let (remaining, ast) = res.expect("failed to parse");
-        assert!(remaining.is_empty());
+        assert!(remaining.is_empty(), "Remaing is not empty: {}", remaining);
         assert_eq!(
             ast,
             PrintItem::TabCall(NumericExpression::new(
@@ -281,7 +276,7 @@ mod tests {
     fn test_print_tab_call() {
         let res = print_statement(CompleteStr("PRINT TAB(24)"));
         let (remaining, ast) = res.expect("failed to parse");
-        assert!(remaining.is_empty(),);
+        assert!(remaining.is_empty(), "Remaing is not empty: {}", remaining);
         assert_eq!(
             ast,
             Statement::Print(PrintStatement {
@@ -290,6 +285,35 @@ mod tests {
                     Term::new(Factor::new(Primary::Constant(24.0), vec![]), vec![]),
                     vec![],
                 ))],
+            })
+        );
+    }
+
+    #[test]
+    fn test_print_constant() {
+        let res = print_statement(CompleteStr(r#"PRINT " 0 ",0.000888," 0 ",-1.0"#));
+        let (remaining, ast) = res.expect("failed to parse");
+        assert!(remaining.is_empty(), "Remaing is not empty: {}", remaining);
+        assert_eq!(
+            ast,
+            Statement::Print(PrintStatement {
+                list: vec![
+                    PrintItem::Expression(Expression::String(StringExpression::Constant(
+                        StringConstant(" 0 ".into()),
+                    ))),
+                    PrintItem::Comma,
+                    PrintItem::Expression(Expression::Numeric(NumericExpression::with_constant(
+                        0.000888,
+                    ))),
+                    PrintItem::Comma,
+                    PrintItem::Expression(Expression::String(StringExpression::Constant(
+                        StringConstant(" 0 ".into()),
+                    ))),
+                    PrintItem::Comma,
+                    PrintItem::Expression(Expression::Numeric(NumericExpression::with_constant(
+                        -1.0,
+                    ))),
+                ],
             })
         );
     }
