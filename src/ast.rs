@@ -51,7 +51,7 @@ pub enum Block {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Statement {
     Print(PrintStatement),
     Let(LetStatement),
@@ -67,7 +67,7 @@ pub enum Constant {
     String(StringConstant),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sign {
     Pos,
     Neg,
@@ -93,7 +93,7 @@ impl ops::Mul<i32> for Sign {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct StringConstant(pub String);
 
 // 7. Variable
@@ -115,13 +115,13 @@ pub enum Variable {
 
 // 8. Expressions
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Expression {
     Numeric(NumericExpression),
     String(StringExpression),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct NumericExpression {
     pub terms: Vec<(Sign, Term)>,
 }
@@ -134,7 +134,7 @@ impl NumericExpression {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Term {
     pub factor: Factor,
     pub factors: Vec<(Multiplier, Factor)>,
@@ -146,7 +146,7 @@ impl Term {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Factor {
     pub primaries: Vec<Primary>,
 }
@@ -159,20 +159,20 @@ impl Factor {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Multiplier {
     Mul,
     Div,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Primary {
     Variable(NumericVariable),
     Constant(f64),
     Expression(NumericExpression),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum StringExpression {
     Variable(StringVariable),
     Constant(StringConstant),
@@ -197,7 +197,7 @@ pub enum Function {
 
 // 11. LET statement
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum LetStatement {
     Numeric {
         variable: NumericVariable,
@@ -211,12 +211,12 @@ pub enum LetStatement {
 
 // 14. PRINT statement
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct PrintStatement {
     pub list: Vec<PrintItem>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum PrintItem {
     Expression(Expression),
     TabCall(NumericExpression),

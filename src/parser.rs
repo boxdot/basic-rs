@@ -132,7 +132,7 @@ named!(multiplier<CompleteStr, Multiplier>,
 
 named!(primary<CompleteStr, Primary>,
     alt!(
-        // map!(numeric_variable, Primary::Variable) |
+        map!(numeric_variable, Primary::Variable) |
         map!(numeric_rep, Primary::Constant)
         // map!(delimited!(char!('('), numeric_expression, char!(')')), Primary::Expression)
     ));
@@ -174,8 +174,9 @@ named!(tab_call<CompleteStr, PrintItem>,
 
 named!(print_item<CompleteStr, PrintItem>,
     alt!(
-        map!(expression, PrintItem::Expression) |
-        tab_call
+        // Note: expression consumes T of TAB, therefore tab_call needs to be parsed first.
+        tab_call |
+        map!(expression, PrintItem::Expression)
     ));
 
 named!(print_item_comma<CompleteStr, PrintItem>,
@@ -263,3 +264,40 @@ named!(pub program<CompleteStr, Result<Program, Error>>,
         opt!(end_of_line) >>
         (Program::new(blocks))
     ));
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tab_call() {
+        let res = tab_call(CompleteStr("TAB(24)"));
+        let (remaining, ast) = res.expect("failed to parse");
+        assert!(remaining.is_empty());
+        assert_eq!(
+            ast,
+            PrintItem::TabCall(NumericExpression::new(
+                None,
+                Term::new(Factor::new(Primary::Constant(24.0), vec![]), vec![]),
+                vec![]
+            ))
+        );
+    }
+
+    #[test]
+    fn test_print_tab_call() {
+        let res = print_statement(CompleteStr("PRINT TAB(24)"));
+        let (remaining, ast) = res.expect("failed to parse");
+        assert!(remaining.is_empty(),);
+        assert_eq!(
+            ast,
+            Statement::Print(PrintStatement {
+                list: vec![PrintItem::TabCall(NumericExpression::new(
+                    None,
+                    Term::new(Factor::new(Primary::Constant(24.0), vec![]), vec![]),
+                    vec![],
+                ))],
+            })
+        );
+    }
+}
