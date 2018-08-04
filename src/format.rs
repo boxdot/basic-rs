@@ -53,7 +53,6 @@ pub fn format_float(value: f64) -> String {
         } else if extrad_int < 0
             && integ.len().max(extrad_int.abs() as usize) + fract.len() <= SIGNIFICANCE_WIDTH
         {
-            println!("special case right");
             // special case: we shall omit E by moving comma to the left
             let n_shift = extrad_int.abs() as usize;
             let fract: String = iter::repeat('0')

@@ -1,11 +1,13 @@
 use error::Error;
 
+use std::collections::HashMap;
 use std::fmt::{self, Write};
 use std::ops;
 
 #[derive(Debug)]
 pub struct Program {
     pub blocks: Vec<Block>,
+    block_index: HashMap<u16, usize>,
 }
 
 impl Program {
@@ -29,7 +31,11 @@ impl Program {
                     line_numbers: line_numbers.collect(),
                 })
             } else {
-                Ok(Program { blocks })
+                let block_index = Self::build_block_index(&blocks)?;
+                Ok(Program {
+                    blocks,
+                    block_index,
+                })
             }
         } else {
             Err(Error::MissingEnd {
@@ -41,6 +47,40 @@ impl Program {
                     .unwrap_or(0u16),
             })
         }
+    }
+
+    pub fn first_block(&self) -> &Block {
+        self.blocks.first().expect("logic error")
+    }
+
+    pub fn next_block<'a, 'b>(&'a self, block: &'b Block) -> &'a Block {
+        let line_number = match block {
+            Block::Line { line_number, .. } => line_number,
+        };
+        let index = self.block_index.get(line_number).expect("logic error");
+        &self.blocks[index + 1]
+    }
+
+    pub fn get_block_by_line_number(&self, line_number: u16) -> Option<&Block> {
+        self.block_index
+            .get(&line_number)
+            .map(|index| &self.blocks[*index])
+    }
+
+    fn build_block_index(blocks: &Vec<Block>) -> Result<HashMap<u16, usize>, Error> {
+        let mut block_index = HashMap::new();
+        for (index, block) in blocks.iter().enumerate() {
+            match block {
+                Block::Line { line_number, .. } => {
+                    if block_index.insert(*line_number, index).is_some() {
+                        return Err(Error::DuplicateLineNumber {
+                            line_number: *line_number,
+                        });
+                    }
+                }
+            }
+        }
+        Ok(block_index)
     }
 }
 
@@ -56,6 +96,8 @@ pub enum Block {
 pub enum Statement {
     Print(PrintStatement),
     Let(LetStatement),
+    Goto(u16),
+    Rem,
     Stop,
     End,
 }

@@ -14,6 +14,8 @@ pub enum Error {
     InvalidTabCall,
     UndefinedNumericVariable(NumericVariable),
     UndefinedStringVariable(StringVariable),
+    DuplicateLineNumber { line_number: u16 },
+    UndefinedLineNumber { line_number: u16 },
 }
 
 impl<'a> convert::From<nom::Err<CompleteStr<'a>>> for Error {
@@ -43,6 +45,12 @@ impl fmt::Display for Error {
             }
             Error::UndefinedStringVariable(ref variable) => {
                 write!(f, "error: undefined string variable '{}'", variable)
+            }
+            Error::DuplicateLineNumber { line_number } => {
+                write!(f, "error: duplicate line number {}", line_number)
+            }
+            Error::UndefinedLineNumber { line_number } => {
+                write!(f, "error: undefined line number {}", line_number)
             }
         }
     }

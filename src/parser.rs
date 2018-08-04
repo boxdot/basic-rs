@@ -21,6 +21,44 @@ named!(letter<CompleteStr, char>,
 named!(digit<CompleteStr, u8>,
     map!(one_of!("0123456789"), |c| c as u8 - '0' as u8));
 
+// 5. Programs
+
+named!(pub program<CompleteStr, Result<Program, Error>>,
+    do_parse!(
+        blocks: many0!(terminated!(block, end_of_line)) >>
+        opt!(end_of_line) >>
+        (Program::new(blocks))
+    ));
+
+named!(pub block<CompleteStr, Block>,
+    do_parse!(
+        line_number: line_number >>
+        statement: sep!(space, statement) >>
+        space0 >>
+        (Block::Line{ line_number, statement })
+    ));
+
+named!(line_number<CompleteStr, u16>,
+    map_res!(take_while_m_n!(1, 4, is_digit), from_decimal));
+
+named!(end_of_line<CompleteStr, CompleteStr>, alt!(eof!() | eol));
+
+named!(end_statement<CompleteStr, Statement>,
+    do_parse!(
+        tag!("END") >>
+        (Statement::End)
+    ));
+
+named!(statement<CompleteStr, Statement>,
+    alt!(
+        goto_statement |
+        let_statement |
+        print_statement |
+        stop_statement |
+        remark_statement |
+        end_statement
+    ));
+
 // 6. Constants
 
 named!(numeric_constant<CompleteStr, f64>,
@@ -167,6 +205,24 @@ named!(string_let_statement<CompleteStr, LetStatement>,
         (LetStatement::String{ variable, expression })
     ));
 
+// 12. Constrol statements
+
+named!(goto_statement<CompleteStr, Statement>,
+    do_parse!(
+        tag!("GO") >>
+        space0 >>
+        tag!("TO") >>
+        space0 >>
+        line_number: line_number >>
+        (Statement::Goto(line_number))
+    ));
+
+named!(stop_statement<CompleteStr, Statement>,
+    do_parse!(
+        tag!("STOP") >>
+        (Statement::Stop)
+    ));
+
 // 14. PRINT statement
 
 named!(print_statement<CompleteStr, Statement>,
@@ -202,7 +258,17 @@ named!(print_separator<CompleteStr, PrintItem>,
         char!(';') => { |_| PrintItem::Semicolon }
     )), space0));
 
-// Program
+// 19. REMARK statement
+
+named!(remark_statement<CompleteStr, Statement>,
+    do_parse!(
+        tag!("REM") >>
+        space0 >>
+        take_until!("\n") >>
+        (Statement::Rem)
+    ));
+
+// helper
 
 fn from_decimal(input: CompleteStr) -> Result<u16, num::ParseIntError> {
     u16::from_str_radix(&input, 10)
@@ -215,43 +281,6 @@ fn u64_from_decimal(input: CompleteStr) -> Result<u64, num::ParseIntError> {
 fn i32_from_decimal(input: CompleteStr) -> Result<i32, num::ParseIntError> {
     i32::from_str_radix(&input, 10)
 }
-
-named!(line_number<CompleteStr, u16>,
-    map_res!(take_while_m_n!(1, 4, is_digit), from_decimal));
-
-named!(stop_statement<CompleteStr, Statement>,
-    do_parse!(
-        tag!("STOP") >>
-        (Statement::Stop)
-    ));
-
-named!(end_statement<CompleteStr, Statement>,
-    do_parse!(
-        tag!("END") >>
-        (Statement::End)
-    ));
-
-named!(statement<CompleteStr, Statement>,
-    do_parse!(
-        statement: alt!(print_statement | let_statement | stop_statement | end_statement) >>
-        (statement)));
-
-named!(pub block<CompleteStr, Block>,
-    do_parse!(
-        line_number: line_number >>
-        statement: sep!(space, statement) >>
-        space0 >>
-        (Block::Line{ line_number, statement })
-    ));
-
-named!(end_of_line<CompleteStr, CompleteStr>, alt!(eof!() | eol));
-
-named!(pub program<CompleteStr, Result<Program, Error>>,
-    do_parse!(
-        blocks: many0!(terminated!(block, end_of_line)) >>
-        opt!(end_of_line) >>
-        (Program::new(blocks))
-    ));
 
 #[cfg(test)]
 mod tests {

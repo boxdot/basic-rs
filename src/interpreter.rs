@@ -171,6 +171,13 @@ fn evaluate_let(statement: &LetStatement, state: &mut State) -> Result<(), Error
     Ok(())
 }
 
+#[derive(Debug)]
+enum Action {
+    NextLine,
+    Stop,
+    Goto(u16),
+}
+
 // Return value `true` means evalution should continue.
 fn evaluate_statement(
     line_number: u16,
@@ -178,18 +185,20 @@ fn evaluate_statement(
     state: &mut State,
     output: &mut String,
     err_output: &mut String,
-) -> Result<bool, Error> {
+) -> Result<Action, Error> {
     let res = match statement {
         Statement::Print(statement) => {
             evaluate_print(line_number, statement, state, output, err_output)?;
-            true
+            Action::NextLine
         }
         Statement::Let(statement) => {
             evaluate_let(statement, state)?;
-            true
+            Action::NextLine
         }
-        Statement::Stop => false,
-        Statement::End => false,
+        Statement::Goto(line_number) => Action::Goto(*line_number),
+        Statement::Rem => Action::NextLine,
+        Statement::Stop => Action::Stop,
+        Statement::End => Action::Stop,
     };
     Ok(res)
 }
@@ -199,22 +208,29 @@ pub fn evaluate(program: &Program) -> Result<(String, String), Error> {
     let mut output = String::new();
     let mut err_output = String::new();
 
-    for block in &program.blocks {
-        match block {
+    let mut block = program.first_block();
+    loop {
+        let action = match block {
             Block::Line {
                 line_number,
                 statement,
-            } => {
-                if !evaluate_statement(
-                    *line_number,
-                    statement,
-                    &mut state,
-                    &mut output,
-                    &mut err_output,
-                )? {
-                    break;
-                }
+            } => evaluate_statement(
+                *line_number,
+                statement,
+                &mut state,
+                &mut output,
+                &mut err_output,
+            )?,
+        };
+
+        match action {
+            Action::NextLine => block = program.next_block(block),
+            Action::Goto(line_number) => {
+                block = program
+                    .get_block_by_line_number(line_number)
+                    .ok_or_else(|| Error::UndefinedLineNumber { line_number })?;
             }
+            Action::Stop => break,
         }
     }
 
