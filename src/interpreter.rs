@@ -101,7 +101,7 @@ fn evaluate_print(
                     columnar_position = 0;
                 }
 
-                *output += &" ".repeat(tab_width - 1);
+                *output += &" ".repeat(tab_width - columnar_position - 1);
                 columnar_position += tab_width - 1;
             }
             PrintItem::Comma => {
@@ -118,15 +118,16 @@ fn evaluate_print(
         }
     }
 
-    let last_item_is_semicolon = statement
+    let last_item_is_comma_or_semicolon = statement
         .list
         .last()
         .map(|s| match s {
             PrintItem::Semicolon => true,
+            PrintItem::Comma => true,
             _ => false,
         })
         .unwrap_or(false);
-    if !last_item_is_semicolon {
+    if !last_item_is_comma_or_semicolon {
         output.push('\n');
     }
 

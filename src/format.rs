@@ -1,3 +1,4 @@
+use std::iter;
 use std::str;
 
 // FIXME: Refactor using structs and float manipulation and not string manipulation as below.
@@ -20,7 +21,7 @@ pub fn format_float(value: f64) -> String {
 
     if integ.len() + fract.len() > SIGNIFICANCE_WIDTH {
         // explicit point scaled notation
-        let value_str = format!("{:.width$E}", value.abs(), width = SIGNIFICANCE_WIDTH);
+        let value_str = format!("{:.width$E}", value.abs(), width = SIGNIFICANCE_WIDTH - 1);
         let mut parts = value_str.split('E');
         let significant = parts.next().unwrap();
         let extrad = parts.next().unwrap();
@@ -40,23 +41,33 @@ pub fn format_float(value: f64) -> String {
             && integ.len() + fract.len().max(extrad_int.abs() as usize) <= SIGNIFICANCE_WIDTH
         {
             // special case: we shall omit E by moving comma to the right
+
+            let n_shift = extrad_int.abs() as usize;
             let integ: String = integ
                 .chars()
-                .chain(fract.chars().take(extrad_int.abs() as usize))
+                .chain(fract.chars().chain(iter::repeat('0')).take(n_shift))
                 .collect();
-            let fract = &fract[(extrad_int.abs() as usize)..];
-            format!("{}{}.{} ", sign_str, integ, fract)
+            let fract: String = fract.chars().skip(n_shift).collect();
+            let full_stop = if !fract.is_empty() { "." } else { "" };
+            format!("{}{}{}{} ", sign_str, integ, full_stop, fract)
         } else if extrad_int < 0
             && integ.len().max(extrad_int.abs() as usize) + fract.len() <= SIGNIFICANCE_WIDTH
         {
+            println!("special case right");
             // special case: we shall omit E by moving comma to the left
-            let fract: String = integ
-                .chars()
-                .skip(integ.len() - extrad_int.abs() as usize)
-                .chain(fract.chars())
+            let n_shift = extrad_int.abs() as usize;
+            let fract: String = iter::repeat('0')
+                .take(n_shift.saturating_sub(integ.len()))
+                .chain(
+                    integ
+                        .chars()
+                        .skip(integ.len().saturating_sub(n_shift))
+                        .chain(fract.chars()),
+                )
                 .collect();
-            let integ = &integ[..fract.len() - extrad_int.abs() as usize];
-            format!("{}{}.{} ", sign_str, integ, fract)
+            let integ = &integ[..integ.len().saturating_sub(n_shift)];
+            let full_stop = if !fract.is_empty() { "." } else { "" };
+            format!("{}{}{}{} ", sign_str, integ, full_stop, fract)
         } else if extrad_int == 0 {
             format!("{}{}.{} ", sign_str, integ, fract)
         } else {
@@ -207,5 +218,11 @@ mod tests {
         assert_eq!(&format_float(4.56E+1), " 45.6 ");
         assert_eq!(&format_float(4.56E-1), " .456 ");
         assert_eq!(&format_float(45.6E-1), " 4.56 ");
+    }
+
+    #[test]
+    fn test_round_explicit_point_notation() {
+        assert_eq!(&format_float(1234567886.0), " 1.23457E+9 ");
+        assert_eq!(&format_float(9.999999999), " 10 ");
     }
 }
