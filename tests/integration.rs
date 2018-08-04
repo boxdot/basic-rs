@@ -135,3 +135,12 @@ fn test_p009() {
         "tests/suite/P009.eok",
     );
 }
+
+#[test]
+fn test_p010() {
+    run_and_compare_output(
+        "tests/suite/P010.BAS",
+        "tests/suite/P010.ok",
+        "tests/suite/P010.eok",
+    );
+}

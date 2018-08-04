@@ -8,6 +8,7 @@ use nom::types::CompleteStr;
 
 mod ast;
 mod error;
+mod format;
 mod interpreter;
 mod parser;
 

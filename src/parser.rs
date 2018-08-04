@@ -38,7 +38,7 @@ named!(sign<CompleteStr, Sign>,
 
 named!(numeric_rep<CompleteStr, f64>,
     map!(pair!(significand, opt!(exrad)),
-        |(significand, exrad)| significand.powi(exrad.unwrap_or(1))));
+        |(significand, exrad)| significand * 10.0_f64.powi(exrad.unwrap_or(0))));
 
 named!(significand<CompleteStr, f64>,
     alt!(
@@ -316,5 +316,13 @@ mod tests {
                 ],
             })
         );
+    }
+
+    #[test]
+    fn test_numeric_constant() {
+        let res = numeric_constant(CompleteStr("-123456E-29"));
+        let (remaining, float) = res.expect("failed to parse");
+        assert!(remaining.is_empty(), "Remaing is not empty: {}", remaining);
+        assert_eq!(float, -123456E-29);
     }
 }
