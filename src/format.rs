@@ -1,3 +1,5 @@
+use std::str;
+
 // FIXME: Refactor using structs and float manipulation and not string manipulation as below.
 // I also strongly believe, that the implementation below is *slow*.
 pub fn format_float(value: f64) -> String {
@@ -32,7 +34,34 @@ pub fn format_float(value: f64) -> String {
         let fract = parts.next().unwrap();
 
         let fract = fract.trim_right_matches('0');
-        format!("{}{}.{}E{}{} ", sign_str, integ, fract, extrad_sign, extrad)
+
+        let extrad_int: i64 = str::parse(extrad).unwrap();
+        if extrad_int > 0
+            && integ.len() + fract.len().max(extrad_int.abs() as usize) <= SIGNIFICANCE_WIDTH
+        {
+            // special case: we shall omit E by moving comma to the right
+            let integ: String = integ
+                .chars()
+                .chain(fract.chars().take(extrad_int.abs() as usize))
+                .collect();
+            let fract = &fract[(extrad_int.abs() as usize)..];
+            format!("{}{}.{} ", sign_str, integ, fract)
+        } else if extrad_int < 0
+            && integ.len().max(extrad_int.abs() as usize) + fract.len() <= SIGNIFICANCE_WIDTH
+        {
+            // special case: we shall omit E by moving comma to the left
+            let fract: String = integ
+                .chars()
+                .skip(integ.len() - extrad_int.abs() as usize)
+                .chain(fract.chars())
+                .collect();
+            let integ = &integ[..fract.len() - extrad_int.abs() as usize];
+            format!("{}{}.{} ", sign_str, integ, fract)
+        } else if extrad_int == 0 {
+            format!("{}{}.{} ", sign_str, integ, fract)
+        } else {
+            format!("{}{}.{}E{}{} ", sign_str, integ, fract, extrad_sign, extrad)
+        }
     } else {
         // implicit or explicit unscaled point notation
         let full_stop = if !fract.is_empty() { "." } else { "" };
@@ -171,5 +200,12 @@ mod tests {
         assert_eq!(&format_float(1.2345600000000E-24), " 1.23456E-24 ");
         assert_eq!(&format_float(0.00000123456E-18), " 1.23456E-24 ");
         assert_eq!(&format_float(0.00001234560000E-19), " 1.23456E-24 ");
+    }
+
+    #[test]
+    fn test_omitting_extrand() {
+        assert_eq!(&format_float(4.56E+1), " 45.6 ");
+        assert_eq!(&format_float(4.56E-1), " .456 ");
+        assert_eq!(&format_float(45.6E-1), " 4.56 ");
     }
 }

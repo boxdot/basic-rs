@@ -2,7 +2,7 @@ use ast::*;
 use error::Error;
 
 use nom::types::CompleteStr;
-use nom::{eol, space};
+use nom::{eol, space, space0};
 
 use std::num;
 
@@ -149,9 +149,9 @@ named!(numeric_let_statement<CompleteStr, LetStatement>,
     do_parse!(
         tag!("LET") >> space >>
         variable: numeric_variable >>
-        opt!(space) >>
+        space0 >>
         tag!("=") >>
-        opt!(space) >>
+        space0 >>
         expression: numeric_expression >>
         (LetStatement::Numeric{ variable, expression })
     ));
@@ -160,9 +160,9 @@ named!(string_let_statement<CompleteStr, LetStatement>,
     do_parse!(
         tag!("LET") >> space >>
         variable: string_variable >>
-        opt!(space) >>
+        space0 >>
         tag!("=") >>
-        opt!(space) >>
+        space0 >>
         expression: string_expression >>
         (LetStatement::String{ variable, expression })
     ));
@@ -197,10 +197,10 @@ named!(tab_call<CompleteStr, PrintItem>,
     ));
 
 named!(print_separator<CompleteStr, PrintItem>,
-    preceded!(many0!(space), alt!(
+    terminated!(preceded!(space0, alt!(
         char!(',') => { |_| PrintItem::Comma } |
         char!(';') => { |_| PrintItem::Semicolon }
-    )));
+    )), space0));
 
 // Program
 
@@ -240,7 +240,7 @@ named!(pub block<CompleteStr, Block>,
     do_parse!(
         line_number: line_number >>
         statement: sep!(space, statement) >>
-        opt!(space) >>
+        space0 >>
         (Block::Line{ line_number, statement })
     ));
 
