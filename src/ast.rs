@@ -67,7 +67,7 @@ impl Program {
             .map(|index| &self.blocks[*index])
     }
 
-    fn build_block_index(blocks: &Vec<Block>) -> Result<HashMap<u16, usize>, Error> {
+    fn build_block_index(blocks: &[Block]) -> Result<HashMap<u16, usize>, Error> {
         let mut block_index = HashMap::new();
         for (index, block) in blocks.iter().enumerate() {
             match block {

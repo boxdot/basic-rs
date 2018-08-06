@@ -30,13 +30,13 @@ impl fmt::Display for Error {
             Error::Parser(ref s) => write!(f, "Parser error: {}", s),
             Error::StatementsAfterEnd { ref line_numbers } => {
                 for line_number in line_numbers {
-                    write!(f, "{}: error: line after an END statement \n", line_number)?;
+                    writeln!(f, "{}: error: line after an END statement ", line_number)?;
                 }
                 Ok(())
             }
-            Error::MissingEnd { line_number } => write!(
+            Error::MissingEnd { line_number } => writeln!(
                 f,
-                "{}: error: program must have an END statement \n",
+                "{}: error: program must have an END statement ",
                 line_number
             ),
             Error::InvalidTabCall => write!(f, "error: invalid TAB call"),
