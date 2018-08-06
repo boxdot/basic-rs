@@ -196,6 +196,7 @@ impl NumericExpression {
         Self { terms: all_terms }
     }
 
+    #[cfg(test)]
     pub fn with_constant(value: f64) -> Self {
         NumericExpression::new(
             Some(if value >= 0.0 { Sign::Pos } else { Sign::Neg }),
