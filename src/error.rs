@@ -6,7 +6,7 @@ use nom::types::CompleteStr;
 use std::convert;
 use std::fmt;
 
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 pub enum Error {
     Parser(String),
     StatementsAfterEnd { line_numbers: Vec<u16> },

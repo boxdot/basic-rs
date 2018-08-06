@@ -1,7 +1,5 @@
 #[macro_use]
 extern crate nom;
-#[macro_use]
-extern crate failure;
 extern crate itertools;
 
 use nom::types::CompleteStr;
