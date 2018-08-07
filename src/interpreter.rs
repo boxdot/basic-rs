@@ -15,7 +15,7 @@ fn evaluate_numeric_variable(variable: &NumericVariable, state: &State) -> Resul
     state
         .numeric_values
         .get(variable)
-        .map(|value| *value)
+        .cloned()
         .ok_or_else(|| Error::UndefinedNumericVariable(*variable))
 }
 
@@ -143,7 +143,7 @@ fn evaluate_string_expression<'a>(
             let value = state
                 .string_values
                 .get(variable)
-                .ok_or_else(|| Error::UndefinedStringVariable(variable.clone()))?;
+                .ok_or_else(|| Error::UndefinedStringVariable(*variable))?;
             Ok(value)
         }
         StringExpression::Constant(constant) => Ok(&constant.0),

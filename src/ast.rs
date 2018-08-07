@@ -67,7 +67,7 @@ impl Program {
             .map(|index| &self.blocks[*index])
     }
 
-    fn build_block_index(blocks: &Vec<Block>) -> Result<HashMap<u16, usize>, Error> {
+    fn build_block_index(blocks: &[Block]) -> Result<HashMap<u16, usize>, Error> {
         let mut block_index = HashMap::new();
         for (index, block) in blocks.iter().enumerate() {
             match block {
@@ -196,6 +196,7 @@ impl NumericExpression {
         Self { terms: all_terms }
     }
 
+    #[cfg(test)]
     pub fn with_constant(value: f64) -> Self {
         NumericExpression::new(
             Some(if value >= 0.0 { Sign::Pos } else { Sign::Neg }),

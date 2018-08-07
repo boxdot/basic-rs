@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["boxdot <d@zerovolt.org>", "jeschkies <k@jeschkies.xyz>"]
 
 [dependencies]
-failure = "0.1"
 nom = "4.0"
 itertools = "0.7"
 

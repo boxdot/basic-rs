@@ -19,7 +19,7 @@ named!(letter<CompleteStr, char>,
     one_of!("ABCDEFGHIJKLMNOPQRSTUVWXYZ"));
 
 named!(digit<CompleteStr, u8>,
-    map!(one_of!("0123456789"), |c| c as u8 - '0' as u8));
+    map!(one_of!("0123456789"), |c| c as u8 - b'0'));
 
 // 5. Programs
 
