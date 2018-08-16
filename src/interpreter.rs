@@ -4,6 +4,7 @@ use format::format_float;
 use itertools::Itertools;
 
 use std::collections::HashMap;
+use std::io::Write;
 
 #[derive(Debug, Default)]
 struct State {
@@ -57,13 +58,16 @@ fn evaluate_numeric_expression(
 }
 
 // TODO: Replace output with a Writer.
-fn evaluate_print(
+fn evaluate_print<W>(
     line_number: u16,
     statement: &PrintStatement,
     state: &State,
-    output: &mut String,
-    err_output: &mut String,
-) -> Result<(), Error> {
+    output: &mut W,
+    err_output: &mut W,
+) -> Result<(), Error>
+where
+    W: Write,
+{
     const COLUMN_WIDTH: usize = 70;
     const NUM_PRINT_ZONES: usize = 5;
     const PRINT_ZONE_WIDTH: usize = COLUMN_WIDTH / NUM_PRINT_ZONES;
@@ -74,13 +78,13 @@ fn evaluate_print(
             PrintItem::Expression(expression) => match expression {
                 Expression::String(string_expression) => {
                     let value = evaluate_string_expression(string_expression, state)?;
-                    *output += &value;
+                    write!(output, "{}", value);
                     columnar_position += value.len();
                 }
                 Expression::Numeric(numeric_expression) => {
                     let value = evaluate_numeric_expression(numeric_expression, state)?;
                     let value_str = format_float(value);
-                    *output += &value_str;
+                    write!(output, "{}", value_str);
                     columnar_position += value_str.len();
                 }
             },
@@ -88,7 +92,8 @@ fn evaluate_print(
                 let tab_width =
                     evaluate_numeric_expression(numeric_expression, state)?.round() as i64;
                 if tab_width < 1 {
-                    *err_output += &format!(
+                    write!(
+                        err_output,
                         "{}: warning: invalid TAB argument ({})\n",
                         line_number, tab_width
                     );
@@ -97,21 +102,26 @@ fn evaluate_print(
 
                 let tab_width = (tab_width as usize) % COLUMN_WIDTH;
                 if tab_width < columnar_position {
-                    output.push('\n');
+                    write!(output, "\n");
                     columnar_position = 0;
                 }
 
-                *output += &" ".repeat(tab_width - columnar_position - 1);
+                write!(output, "{:1$}", "", tab_width - columnar_position - 1);
                 columnar_position += tab_width - 1;
             }
             PrintItem::Comma => {
                 let current_print_zone = columnar_position / PRINT_ZONE_WIDTH;
                 if current_print_zone + 1 < NUM_PRINT_ZONES {
                     let next_columnar_position = (current_print_zone + 1) * PRINT_ZONE_WIDTH;
-                    *output += &" ".repeat(next_columnar_position - columnar_position);
+                    write!(
+                        output,
+                        "{:1$}",
+                        "",
+                        next_columnar_position - columnar_position
+                    );
                     columnar_position = next_columnar_position;
                 } else {
-                    output.push('\n');
+                    write!(output, "\n");
                 }
             }
             PrintItem::Semicolon => (),
@@ -128,7 +138,7 @@ fn evaluate_print(
         })
         .unwrap_or(false);
     if !last_item_is_comma_or_semicolon {
-        output.push('\n');
+        write!(output, "\n");
     }
 
     Ok(())
@@ -179,13 +189,16 @@ enum Action {
 }
 
 // Return value `true` means evalution should continue.
-fn evaluate_statement(
+fn evaluate_statement<W>(
     line_number: u16,
     statement: &Statement,
     state: &mut State,
-    output: &mut String,
-    err_output: &mut String,
-) -> Result<Action, Error> {
+    output: &mut W,
+    err_output: &mut W,
+) -> Result<Action, Error>
+where
+    W: Write,
+{
     let res = match statement {
         Statement::Print(statement) => {
             evaluate_print(line_number, statement, state, output, err_output)?;
@@ -205,8 +218,8 @@ fn evaluate_statement(
 
 pub fn evaluate(program: &Program) -> Result<(String, String), Error> {
     let mut state = State::default();
-    let mut output = String::new();
-    let mut err_output = String::new();
+    let mut output = Vec::new();
+    let mut err_output = Vec::new();
 
     let mut block = program.first_block();
     loop {
@@ -234,5 +247,7 @@ pub fn evaluate(program: &Program) -> Result<(String, String), Error> {
         }
     }
 
-    Ok((output, err_output))
+    let o = String::from_utf8(output).unwrap();
+    let e = String::from_utf8(err_output).unwrap();
+    Ok((o, e))
 }
