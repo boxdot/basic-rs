@@ -39,7 +39,7 @@ impl Program {
             }
         } else {
             Err(Error::MissingEnd {
-                line_number: blocks
+                src_line_number: blocks
                     .last()
                     .map(|b| match b {
                         Block::Line { line_number, .. } => *line_number,
