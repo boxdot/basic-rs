@@ -22,11 +22,13 @@ impl Program {
 
         if let Some(end_statement_pos) = end_statement_pos {
             if end_statement_pos + 1 != blocks.len() {
-                let line_numbers = blocks.into_iter().skip(end_statement_pos + 1).map(
-                    |b| match b {
-                        Block::Line { line_number, .. } => line_number,
-                    },
-                );
+                let line_numbers =
+                    blocks
+                        .into_iter()
+                        .skip(end_statement_pos + 1)
+                        .map(|b| match b {
+                            Block::Line { line_number, .. } => line_number,
+                        });
                 Err(Error::StatementsAfterEnd {
                     line_numbers: line_numbers.collect(),
                 })
@@ -43,8 +45,7 @@ impl Program {
                     .last()
                     .map(|b| match b {
                         Block::Line { line_number, .. } => *line_number,
-                    })
-                    .unwrap_or(0u16),
+                    }).unwrap_or(0u16),
             })
         }
     }
@@ -97,7 +98,9 @@ pub enum Statement {
     Print(PrintStatement),
     Let(LetStatement),
     Goto(u16),
+    Gosub(u16),
     Rem,
+    Return,
     Stop,
     End,
 }

@@ -52,8 +52,10 @@ named!(end_statement<CompleteStr, Statement>,
 named!(statement<CompleteStr, Statement>,
     alt!(
         goto_statement |
+        gosub_statement |
         let_statement |
         print_statement |
+        return_statement |
         stop_statement |
         remark_statement |
         end_statement
@@ -205,7 +207,7 @@ named!(string_let_statement<CompleteStr, LetStatement>,
         (LetStatement::String{ variable, expression })
     ));
 
-// 12. Constrol statements
+// 12. Control statements
 
 named!(goto_statement<CompleteStr, Statement>,
     do_parse!(
@@ -215,6 +217,22 @@ named!(goto_statement<CompleteStr, Statement>,
         space0 >>
         line_number: line_number >>
         (Statement::Goto(line_number))
+    ));
+
+named!(gosub_statement<CompleteStr, Statement>,
+    do_parse!(
+        tag!("GO") >>
+        space0 >>
+        tag!("SUB") >>
+        space0 >>
+        line_number: line_number >>
+        (Statement::Gosub(line_number))
+    ));
+
+named!(return_statement<CompleteStr, Statement>,
+    do_parse!(
+        tag!("RETURN") >>
+        (Statement::Return)
     ));
 
 named!(stop_statement<CompleteStr, Statement>,

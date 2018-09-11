@@ -25,6 +25,9 @@ pub enum Error {
         src_line_number: u16,
         line_number: u16,
     },
+    UnexpectedReturn {
+        src_line_number: u16,
+    },
 }
 
 impl<'a> convert::From<nom::Err<CompleteStr<'a>>> for Error {
@@ -66,6 +69,9 @@ impl fmt::Display for Error {
                 "{}: error: non-existing line number \n GOTO {}\n      ^\n",
                 src_line_number, line_number
             ),
+            Error::UnexpectedReturn { src_line_number } => {
+                write!(f, "{}: error: unexpected return\n", src_line_number)
+            }
         }
     }
 }
