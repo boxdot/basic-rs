@@ -223,17 +223,20 @@ pub fn evaluate(program: &Program) -> Result<(String, String), Error> {
 
     let mut block = program.first_block();
     loop {
-        let action = match block {
+        let (action, src_line_number) = match block {
             Block::Line {
                 line_number,
                 statement,
-            } => evaluate_statement(
+            } => (
+                evaluate_statement(
+                    *line_number,
+                    statement,
+                    &mut state,
+                    &mut output,
+                    &mut err_output,
+                )?,
                 *line_number,
-                statement,
-                &mut state,
-                &mut output,
-                &mut err_output,
-            )?,
+            ),
         };
 
         match action {
@@ -241,7 +244,10 @@ pub fn evaluate(program: &Program) -> Result<(String, String), Error> {
             Action::Goto(line_number) => {
                 block = program
                     .get_block_by_line_number(line_number)
-                    .ok_or_else(|| Error::UndefinedLineNumber { line_number })?;
+                    .ok_or_else(|| Error::UndefinedLineNumber {
+                        src_line_number,
+                        line_number,
+                    })?;
             }
             Action::Stop => break,
         }

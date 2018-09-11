@@ -9,13 +9,22 @@ use std::fmt;
 #[derive(Debug)]
 pub enum Error {
     Parser(String),
-    StatementsAfterEnd { line_numbers: Vec<u16> },
-    MissingEnd { line_number: u16 },
+    StatementsAfterEnd {
+        line_numbers: Vec<u16>,
+    },
+    MissingEnd {
+        src_line_number: u16,
+    },
     InvalidTabCall,
     UndefinedNumericVariable(NumericVariable),
     UndefinedStringVariable(StringVariable),
-    DuplicateLineNumber { line_number: u16 },
-    UndefinedLineNumber { line_number: u16 },
+    DuplicateLineNumber {
+        line_number: u16,
+    },
+    UndefinedLineNumber {
+        src_line_number: u16,
+        line_number: u16,
+    },
 }
 
 impl<'a> convert::From<nom::Err<CompleteStr<'a>>> for Error {
@@ -34,10 +43,10 @@ impl fmt::Display for Error {
                 }
                 Ok(())
             }
-            Error::MissingEnd { line_number } => writeln!(
+            Error::MissingEnd { src_line_number } => writeln!(
                 f,
                 "{}: error: program must have an END statement ",
-                line_number
+                src_line_number
             ),
             Error::InvalidTabCall => write!(f, "error: invalid TAB call"),
             Error::UndefinedNumericVariable(ref variable) => {
@@ -49,9 +58,14 @@ impl fmt::Display for Error {
             Error::DuplicateLineNumber { line_number } => {
                 write!(f, "error: duplicate line number {}", line_number)
             }
-            Error::UndefinedLineNumber { line_number } => {
-                write!(f, "error: undefined line number {}", line_number)
-            }
+            Error::UndefinedLineNumber {
+                src_line_number,
+                line_number,
+            } => write!(
+                f,
+                "{}: error: non-existing line number \n GOTO {}\n      ^\n",
+                src_line_number, line_number
+            ),
         }
     }
 }
