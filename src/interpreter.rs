@@ -10,6 +10,7 @@ use std::io::Write;
 struct State {
     numeric_values: HashMap<NumericVariable, f64>,
     string_values: HashMap<StringVariable, String>,
+    stack: Vec<u16>,
 }
 
 fn evaluate_numeric_variable(variable: &NumericVariable, state: &State) -> Result<f64, Error> {
@@ -135,8 +136,7 @@ where
             PrintItem::Semicolon => true,
             PrintItem::Comma => true,
             _ => false,
-        })
-        .unwrap_or(false);
+        }).unwrap_or(false);
     if !last_item_is_comma_or_semicolon {
         write!(output, "\n");
     }
@@ -184,8 +184,10 @@ fn evaluate_let(statement: &LetStatement, state: &mut State) -> Result<(), Error
 #[derive(Debug)]
 enum Action {
     NextLine,
+    Return,
     Stop,
     Goto(u16),
+    Gosub(u16),
 }
 
 // Return value `true` means evalution should continue.
@@ -209,7 +211,9 @@ where
             Action::NextLine
         }
         Statement::Goto(line_number) => Action::Goto(*line_number),
+        Statement::Gosub(line_number) => Action::Gosub(*line_number),
         Statement::Rem => Action::NextLine,
+        Statement::Return => Action::Return,
         Statement::Stop => Action::Stop,
         Statement::End => Action::Stop,
     };
@@ -248,6 +252,28 @@ pub fn evaluate(program: &Program) -> Result<(String, String), Error> {
                         src_line_number,
                         line_number,
                     })?;
+            }
+            Action::Gosub(line_number) => {
+                block = program
+                    .get_block_by_line_number(line_number)
+                    .ok_or_else(|| Error::UndefinedLineNumber {
+                        src_line_number,
+                        line_number,
+                    })?;
+                state.stack.push(src_line_number);
+            }
+            Action::Return => {
+                let prev_line_number = state
+                    .stack
+                    .pop()
+                    .ok_or_else(|| Error::UnexpectedReturn { src_line_number })?;
+                let prev_block = program
+                    .get_block_by_line_number(prev_line_number)
+                    .ok_or_else(|| Error::UndefinedLineNumber {
+                        src_line_number,
+                        line_number: prev_line_number,
+                    })?;
+                block = program.next_block(prev_block);
             }
             Action::Stop => break,
         }
