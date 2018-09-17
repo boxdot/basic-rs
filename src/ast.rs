@@ -99,6 +99,7 @@ pub enum Statement {
     Let(LetStatement),
     Goto(u16),
     Gosub(u16),
+    If(Expression, Relationship, Expression, u16),
     Rem,
     Return,
     Stop,
@@ -282,6 +283,18 @@ pub enum LetStatement {
         variable: StringVariable,
         expression: StringExpression,
     },
+}
+
+// 12. Control statements
+
+#[derive(Debug, PartialEq)]
+pub enum Relationship {
+    LessThan,
+    LessThanOrEqualTo,
+    EqualTo,
+    GreaterThan,
+    GreaterThanOrEqualTo,
+    NotEqualTo,
 }
 
 // 14. PRINT statement

@@ -181,6 +181,49 @@ fn evaluate_let(statement: &LetStatement, state: &mut State) -> Result<(), Error
     Ok(())
 }
 
+fn evaluate_if(
+    left_expression: &Expression,
+    relation: &Relationship,
+    right_expression: &Expression,
+    state: &State,
+) -> Result<bool, Error> {
+    match (left_expression, right_expression) {
+        (
+            Expression::Numeric(left_numeric_expression),
+            Expression::Numeric(right_numeric_expression),
+        ) => {
+            let left = evaluate_numeric_expression(left_numeric_expression, state)?;
+            let right = evaluate_numeric_expression(right_numeric_expression, state)?;
+
+            Ok(match relation {
+                Relationship::LessThan => left <= right,
+                Relationship::LessThanOrEqualTo => left <= right,
+                Relationship::EqualTo => left == right,
+                Relationship::GreaterThanOrEqualTo => left >= right,
+                Relationship::GreaterThan => left > right,
+                Relationship::NotEqualTo => left != right,
+            })
+        }
+        (
+            Expression::String(left_string_expression),
+            Expression::String(right_string_expression),
+        ) => {
+            let left = evaluate_string_expression(left_string_expression, state)?;
+            let right = evaluate_string_expression(right_string_expression, state)?;
+
+            Ok(match relation {
+                Relationship::LessThan => left <= right,
+                Relationship::LessThanOrEqualTo => left <= right,
+                Relationship::EqualTo => left == right,
+                Relationship::GreaterThanOrEqualTo => left >= right,
+                Relationship::GreaterThan => left > right,
+                Relationship::NotEqualTo => left != right,
+            })
+        }
+        _ => Err(Error::InvalidIfStatement),
+    }
+}
+
 #[derive(Debug)]
 enum Action {
     NextLine,
@@ -212,6 +255,14 @@ where
         }
         Statement::Goto(line_number) => Action::Goto(*line_number),
         Statement::Gosub(line_number) => Action::Gosub(*line_number),
+        Statement::If(left_expression, relationship, right_expression, line_number) => {
+            let result = evaluate_if(left_expression, relationship, right_expression, state)?;
+            if result {
+                Action::Goto(*line_number)
+            } else {
+                Action::NextLine
+            }
+        }
         Statement::Rem => Action::NextLine,
         Statement::Return => Action::Return,
         Statement::Stop => Action::Stop,

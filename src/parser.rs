@@ -53,6 +53,7 @@ named!(statement<CompleteStr, Statement>,
     alt!(
         goto_statement |
         gosub_statement |
+        if_then_statement |
         let_statement |
         print_statement |
         return_statement |
@@ -136,7 +137,8 @@ named!(expression<CompleteStr, Expression>,
         // Note: Since numeric_expression sometimes matches a prefix of a string_expression,
         // first we need to try to parse string_expression, and only after it numeric_expression.
         map!(string_expression, Expression::String) |
-        map!(numeric_expression, Expression::Numeric)
+        map!(numeric_expression, Expression::Numeric) //|
+        //map!(string_variable, Expression::Variable)
     ));
 
 named!(string_expression<CompleteStr, StringExpression>,
@@ -179,6 +181,18 @@ named!(primary<CompleteStr, Primary>,
         map!(numeric_rep, Primary::Constant)
         // map!(delimited!(char!('('), numeric_expression, char!(')')), Primary::Expression)
     ));
+
+named!(relational_operator<CompleteStr, Relationship>,
+    alt!(
+        tag!("<=") => { |_| Relationship::LessThanOrEqualTo } |
+        tag!("==") => { |_| Relationship::EqualTo } |
+        tag!("=") => { |_| Relationship::EqualTo} |
+        tag!("<>") => { |_| Relationship::NotEqualTo } |
+        tag!(">=") => { |_| Relationship::GreaterThanOrEqualTo } |
+        tag!("<") => { |_| Relationship::LessThan } |
+        tag!(">") => { |_| Relationship::GreaterThan }
+    )
+);
 
 // 11. LET statement
 
@@ -227,6 +241,24 @@ named!(gosub_statement<CompleteStr, Statement>,
         space0 >>
         line_number: line_number >>
         (Statement::Gosub(line_number))
+    ));
+
+// TODO: Restrict to numericexpr-relation-numericexpr
+// or stringexpr-relation-stringexpr
+named!(if_then_statement<CompleteStr, Statement>,
+    do_parse!(
+        tag!("IF") >>
+        space0 >>
+        left_expression: expression >>
+        space0 >>
+        relation: relational_operator >>
+        space0 >>
+        right_expression: expression >>
+        space0 >>
+        tag!("THEN") >>
+        space0 >>
+        line_number: line_number >>
+        (Statement::If(left_expression, relation, right_expression, line_number))
     ));
 
 named!(return_statement<CompleteStr, Statement>,
