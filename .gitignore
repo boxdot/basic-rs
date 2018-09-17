@@ -1,2 +1,7 @@
 /target
 **/*.rs.bk
+wasm/webapp/app.js
+wasm/webapp/basic.js
+wasm/webapp/basic.d.ts
+wasm/webapp/*.wasm
+wasm/webapp/*.bak

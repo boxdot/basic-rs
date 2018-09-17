@@ -1,0 +1,30 @@
+                <meta charset="utf-8" emacsmode="-*- markdown -*-">
+                            **BASIC interpreter**
+
+This is a work-in-progress BASIC interpreter running fully in your browser. It is
+implemented in Rust and compiled to WASM. For source code and more, check out
+https://github.com/boxdot/basic-rs.
+
+(#) Input program
+
+<pre>
+  <textarea id="programTxt" rows="20" cols="80">100 PRINT "Hello, World!"
+200 END</textarea>
+</pre>
+
+<input id="runBtn" type="button" value="Run" disabled="true">
+
+(##) Output
+
+<pre id="output"></pre>
+
+<style class="fallback">body{visibility:hidden;white-space:pre;font-family:monospace}</style>
+<style>
+  #programTxt {
+    border: 1px #ddd solid;
+  }
+</style>
+<script src="markdeep.min.js"></script>
+<script src="https://casual-effects.com/markdeep/latest/markdeep.min.js?"></script>
+<script src="app.js"></script>
+<script>window.alreadyProcessedMarkdeep||(document.body.style.visibility="visible")</script>
