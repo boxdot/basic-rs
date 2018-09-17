@@ -11,6 +11,7 @@ struct State {
     numeric_values: HashMap<NumericVariable, f64>,
     string_values: HashMap<StringVariable, String>,
     stack: Vec<u16>,
+    columnar_position: usize,
 }
 
 fn evaluate_numeric_variable(variable: &NumericVariable, state: &State) -> Result<f64, Error> {
@@ -62,7 +63,7 @@ fn evaluate_numeric_expression(
 fn evaluate_print<W>(
     line_number: u16,
     statement: &PrintStatement,
-    state: &State,
+    state: &mut State,
     output: &mut W,
     err_output: &mut W,
 ) -> Result<(), Error>
@@ -73,7 +74,7 @@ where
     const NUM_PRINT_ZONES: usize = 5;
     const PRINT_ZONE_WIDTH: usize = COLUMN_WIDTH / NUM_PRINT_ZONES;
 
-    let mut columnar_position = 0;
+    let mut columnar_position = state.columnar_position;
     for item in &statement.list {
         match item {
             PrintItem::Expression(expression) => match expression {
@@ -108,7 +109,7 @@ where
                 }
 
                 write!(output, "{:1$}", "", tab_width - columnar_position - 1);
-                columnar_position += tab_width - 1;
+                columnar_position = tab_width - 1;
             }
             PrintItem::Comma => {
                 let current_print_zone = columnar_position / PRINT_ZONE_WIDTH;
@@ -128,6 +129,7 @@ where
             PrintItem::Semicolon => (),
         }
     }
+    state.columnar_position = columnar_position;
 
     let last_item_is_comma_or_semicolon = statement
         .list
@@ -138,6 +140,7 @@ where
             _ => false,
         }).unwrap_or(false);
     if !last_item_is_comma_or_semicolon {
+        state.columnar_position = 0;
         write!(output, "\n");
     }
 
