@@ -28,7 +28,9 @@ pub enum Error {
     UnexpectedReturn {
         src_line_number: u16,
     },
-    InvalidIfStatement,
+    InvalidIfStatement {
+        line_number: u16,
+    },
 }
 
 impl<'a> convert::From<nom::Err<CompleteStr<'a>>> for Error {
@@ -73,8 +75,8 @@ impl fmt::Display for Error {
             Error::UnexpectedReturn { src_line_number } => {
                 write!(f, "{}: error: unexpected return\n", src_line_number)
             },
-            Error::InvalidIfStatement => {
-                write!(f, "invalid IF statement, it only supports string-string or numeric-numeric comparisons\n")
+            Error::InvalidIfStatement { line_number } => {
+                write!(f, "{}: error: invalid IF statement, it only supports string-string or numeric-numeric comparisons\n", line_number)
             }
         }
     }

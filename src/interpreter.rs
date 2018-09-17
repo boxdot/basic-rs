@@ -188,6 +188,7 @@ fn evaluate_if(
     left_expression: &Expression,
     relation: &Relationship,
     right_expression: &Expression,
+    line_number: &u16,
     state: &State,
 ) -> Result<bool, Error> {
     match (left_expression, right_expression) {
@@ -223,7 +224,9 @@ fn evaluate_if(
                 Relationship::NotEqualTo => left != right,
             })
         }
-        _ => Err(Error::InvalidIfStatement),
+        _ => Err(Error::InvalidIfStatement {
+            line_number: *line_number,
+        }),
     }
 }
 
@@ -259,7 +262,13 @@ where
         Statement::Goto(line_number) => Action::Goto(*line_number),
         Statement::Gosub(line_number) => Action::Gosub(*line_number),
         Statement::If(left_expression, relationship, right_expression, line_number) => {
-            if evaluate_if(left_expression, relationship, right_expression, state)? {
+            if evaluate_if(
+                left_expression,
+                relationship,
+                right_expression,
+                line_number,
+                state,
+            )? {
                 Action::Goto(*line_number)
             } else {
                 Action::NextLine
