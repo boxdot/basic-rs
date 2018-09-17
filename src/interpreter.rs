@@ -256,8 +256,7 @@ where
         Statement::Goto(line_number) => Action::Goto(*line_number),
         Statement::Gosub(line_number) => Action::Gosub(*line_number),
         Statement::If(left_expression, relationship, right_expression, line_number) => {
-            let result = evaluate_if(left_expression, relationship, right_expression, state)?;
-            if result {
+            if evaluate_if(left_expression, relationship, right_expression, state)? {
                 Action::Goto(*line_number)
             } else {
                 Action::NextLine

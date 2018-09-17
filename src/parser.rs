@@ -137,8 +137,7 @@ named!(expression<CompleteStr, Expression>,
         // Note: Since numeric_expression sometimes matches a prefix of a string_expression,
         // first we need to try to parse string_expression, and only after it numeric_expression.
         map!(string_expression, Expression::String) |
-        map!(numeric_expression, Expression::Numeric) //|
-        //map!(string_variable, Expression::Variable)
+        map!(numeric_expression, Expression::Numeric)
     ));
 
 named!(string_expression<CompleteStr, StringExpression>,
@@ -243,8 +242,6 @@ named!(gosub_statement<CompleteStr, Statement>,
         (Statement::Gosub(line_number))
     ));
 
-// TODO: Restrict to numericexpr-relation-numericexpr
-// or stringexpr-relation-stringexpr
 named!(if_then_statement<CompleteStr, Statement>,
     do_parse!(
         tag!("IF") >>
