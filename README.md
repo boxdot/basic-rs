@@ -4,7 +4,7 @@ Implementation of BASIC interpreter in Rust. The implementation follows the [ECM
 
 This project is **WIP**:
 
-![test coverage](https://img.shields.io/badge/style-18%2F208%20tests-blue.svg?longCache=true&label=Minimal%20basic%20test%20coverage)
+![test coverage](https://img.shields.io/badge/style-19%2F208%20tests-blue.svg?longCache=true&label=Minimal%20basic%20test%20coverage)
 
 ## How to implement a test
 

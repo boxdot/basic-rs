@@ -200,7 +200,7 @@ fn evaluate_if(
             let right = evaluate_numeric_expression(right_numeric_expression, state)?;
 
             Ok(match relation {
-                Relationship::LessThan => left <= right,
+                Relationship::LessThan => left < right,
                 Relationship::LessThanOrEqualTo => left <= right,
                 Relationship::EqualTo => left == right,
                 Relationship::GreaterThanOrEqualTo => left >= right,
@@ -216,7 +216,7 @@ fn evaluate_if(
             let right = evaluate_string_expression(right_string_expression, state)?;
 
             Ok(match relation {
-                Relationship::LessThan => left <= right,
+                Relationship::LessThan => left < right,
                 Relationship::LessThanOrEqualTo => left <= right,
                 Relationship::EqualTo => left == right,
                 Relationship::GreaterThanOrEqualTo => left >= right,
