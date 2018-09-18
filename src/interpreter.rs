@@ -225,7 +225,7 @@ fn evaluate_if(
             })
         }
         _ => Err(Error::InvalidIfStatement {
-            line_number: *line_number,
+            src_line_number: *line_number,
         }),
     }
 }

@@ -29,7 +29,7 @@ pub enum Error {
         src_line_number: u16,
     },
     InvalidIfStatement {
-        line_number: u16,
+        src_line_number: u16,
     },
 }
 
@@ -75,8 +75,8 @@ impl fmt::Display for Error {
             Error::UnexpectedReturn { src_line_number } => {
                 write!(f, "{}: error: unexpected return\n", src_line_number)
             },
-            Error::InvalidIfStatement { line_number } => {
-                write!(f, "{}: error: invalid IF statement, it only supports string-string or numeric-numeric comparisons\n", line_number)
+            Error::InvalidIfStatement { src_line_number } => {
+                write!(f, "{}: error: invalid IF statement, it only supports string-string or numeric-numeric comparisons\n", src_line_number)
             }
         }
     }
