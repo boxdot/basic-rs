@@ -138,7 +138,8 @@ where
             PrintItem::Semicolon => true,
             PrintItem::Comma => true,
             _ => false,
-        }).unwrap_or(false);
+        })
+        .unwrap_or(false);
     if !last_item_is_comma_or_semicolon {
         state.columnar_position = 0;
         write!(output, "\n");
@@ -185,48 +186,41 @@ fn evaluate_let(statement: &LetStatement, state: &mut State) -> Result<(), Error
 }
 
 fn evaluate_if(
-    left_expression: &Expression,
-    relation: &Relationship,
-    right_expression: &Expression,
+    if_statement: &RelationalExpression,
     line_number: &u16,
     state: &State,
 ) -> Result<bool, Error> {
-    match (left_expression, right_expression) {
-        (
-            Expression::Numeric(left_numeric_expression),
-            Expression::Numeric(right_numeric_expression),
+    match if_statement {
+        RelationalExpression::StringComparison(
+            left_string_expression,
+            relation,
+            right_string_expression,
+        ) => {
+            let left = evaluate_string_expression(left_string_expression, state)?;
+            let right = evaluate_string_expression(right_string_expression, state)?;
+
+            match relation {
+                EqualityRelation::EqualTo => Ok(left == right),
+                EqualityRelation::NotEqualTo => Ok(left != right),
+            }
+        }
+        RelationalExpression::NumericComparison(
+            left_numeric_expression,
+            relation,
+            right_numeric_expression,
         ) => {
             let left = evaluate_numeric_expression(left_numeric_expression, state)?;
             let right = evaluate_numeric_expression(right_numeric_expression, state)?;
 
             Ok(match relation {
-                Relationship::LessThan => left < right,
-                Relationship::LessThanOrEqualTo => left <= right,
-                Relationship::EqualTo => left == right,
-                Relationship::GreaterThanOrEqualTo => left >= right,
-                Relationship::GreaterThan => left > right,
-                Relationship::NotEqualTo => left != right,
+                Relation::LessThan => left < right,
+                Relation::LessThanOrEqualTo => left <= right,
+                Relation::EqualTo => left == right,
+                Relation::GreaterThanOrEqualTo => left >= right,
+                Relation::GreaterThan => left > right,
+                Relation::NotEqualTo => left != right,
             })
         }
-        (
-            Expression::String(left_string_expression),
-            Expression::String(right_string_expression),
-        ) => {
-            let left = evaluate_string_expression(left_string_expression, state)?;
-            let right = evaluate_string_expression(right_string_expression, state)?;
-
-            Ok(match relation {
-                Relationship::LessThan => left < right,
-                Relationship::LessThanOrEqualTo => left <= right,
-                Relationship::EqualTo => left == right,
-                Relationship::GreaterThanOrEqualTo => left >= right,
-                Relationship::GreaterThan => left > right,
-                Relationship::NotEqualTo => left != right,
-            })
-        }
-        _ => Err(Error::InvalidIfStatement {
-            src_line_number: *line_number,
-        }),
     }
 }
 
@@ -261,14 +255,8 @@ where
         }
         Statement::Goto(line_number) => Action::Goto(*line_number),
         Statement::Gosub(line_number) => Action::Gosub(*line_number),
-        Statement::If(left_expression, relationship, right_expression, line_number) => {
-            if evaluate_if(
-                left_expression,
-                relationship,
-                right_expression,
-                line_number,
-                state,
-            )? {
+        Statement::IfThen(if_statement, line_number) => {
+            if evaluate_if(if_statement, line_number, state)? {
                 Action::Goto(*line_number)
             } else {
                 Action::NextLine
