@@ -4,7 +4,54 @@ use error::Error;
 use nom::types::CompleteStr;
 use nom::{eol, space, space0};
 
+use std::fmt;
 use std::num;
+
+pub enum ErrorCode {
+    ExpectedStringExpression,
+    Unknown,
+}
+
+impl From<u32> for ErrorCode {
+    fn from(code: u32) -> Self {
+        match code {
+            0 => ErrorCode::ExpectedStringExpression,
+            _ => ErrorCode::Unknown,
+        }
+    }
+}
+
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ErrorCode::ExpectedStringExpression => f.write_str("string expression expected"),
+            ErrorCode::Unknown => f.write_str("unknown"),
+        }
+    }
+}
+
+impl ErrorCode {
+    /// Converts error code to BASIC conform error output.
+    ///
+    /// # Arguments
+    ///
+    /// `line` - Full line string where the error happened.
+    /// `remaining` - Remaining statement which could not be parsed. Must be a substring of `line`.
+    pub fn to_string(&self, line: &str, remaining: &str) -> Option<String> {
+        let mut parts = line.trim().splitn(2, ' ');
+        let line_number = parts.next()?;
+        let statement = parts.next()?;
+        let pos = statement.find(remaining)?;
+        Some(format!(
+            "{}: error: {} \n {}\n{:width$}^\n",
+            line_number,
+            self,
+            statement,
+            "",
+            width = pos + 1
+        ))
+    }
+}
 
 // 4. Syntax
 
@@ -30,7 +77,7 @@ named!(pub program<CompleteStr, Result<Program, Error>>,
         (Program::new(blocks))
     ));
 
-named!(pub block<CompleteStr, Block>,
+named!(block<CompleteStr, Block>,
     do_parse!(
         line_number: line_number >>
         statement: sep!(space, statement) >>
@@ -181,7 +228,6 @@ named!(primary<CompleteStr, Primary>,
         // map!(delimited!(char!('('), numeric_expression, char!(')')), Primary::Expression)
     ));
 
-
 named!(relation<CompleteStr, Relation>,
     alt!(
         tag!("==") => { |_| Relation::EqualTo } |
@@ -263,8 +309,7 @@ named!(if_then_statement<CompleteStr, Statement>,
         (Statement::IfThen(if_statement, line_number))
     ));
 
-
-named!(relational_expression<CompleteStr, RelationalExpression>, 
+named!(relational_expression<CompleteStr, RelationalExpression>,
     alt!(
         do_parse!(
         left_expression: numeric_expression >>
@@ -279,7 +324,8 @@ named!(relational_expression<CompleteStr, RelationalExpression>,
         space0 >>
         relation: equality_relation >>
         space0 >>
-        right_expression: string_expression >>
+        right_expression: return_error!(ErrorKind::Custom(
+            ErrorCode::ExpectedStringExpression as u32), string_expression) >>
         (RelationalExpression::StringComparison(left_expression, relation, right_expression))
     ))
 );
