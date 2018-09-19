@@ -9,3 +9,6 @@ itertools = "0.7"
 
 [dev-dependencies]
 diff = "0.1"
+
+[workspace]
+members = ["wasm"]
