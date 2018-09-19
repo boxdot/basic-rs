@@ -53,6 +53,7 @@ named!(statement<CompleteStr, Statement>,
     alt!(
         goto_statement |
         gosub_statement |
+        if_then_statement |
         let_statement |
         print_statement |
         return_statement |
@@ -180,6 +181,27 @@ named!(primary<CompleteStr, Primary>,
         // map!(delimited!(char!('('), numeric_expression, char!(')')), Primary::Expression)
     ));
 
+
+named!(relation<CompleteStr, Relation>,
+    alt!(
+        tag!("==") => { |_| Relation::EqualTo } |
+        tag!("=") => { |_| Relation::EqualTo} |
+        tag!("<>") => { |_| Relation::NotEqualTo } |
+        tag!("<=") => { |_| Relation::LessThanOrEqualTo } |
+        tag!(">=") => { |_| Relation::GreaterThanOrEqualTo } |
+        tag!("<") => { |_| Relation::LessThan } |
+        tag!(">") => { |_| Relation::GreaterThan }
+    )
+);
+
+named!(equality_relation<CompleteStr, EqualityRelation>,
+    alt!(
+        tag!("==") => { |_| EqualityRelation::EqualTo } |
+        tag!("=") => { |_| EqualityRelation::EqualTo} |
+        tag!("<>") => { |_| EqualityRelation::NotEqualTo }
+    )
+);
+
 // 11. LET statement
 
 named!(let_statement<CompleteStr, Statement>,
@@ -228,6 +250,39 @@ named!(gosub_statement<CompleteStr, Statement>,
         line_number: line_number >>
         (Statement::Gosub(line_number))
     ));
+
+named!(if_then_statement<CompleteStr, Statement>,
+    do_parse!(
+        tag!("IF") >>
+        space0 >>
+        if_statement: relational_expression >>
+        space0 >>
+        tag!("THEN") >>
+        space0 >>
+        line_number: line_number >>
+        (Statement::IfThen(if_statement, line_number))
+    ));
+
+
+named!(relational_expression<CompleteStr, RelationalExpression>, 
+    alt!(
+        do_parse!(
+        left_expression: numeric_expression >>
+        space0 >>
+        relation: relation >>
+        space0 >>
+        right_expression: numeric_expression >>
+        (RelationalExpression::NumericComparison(left_expression, relation, right_expression))
+    ) |
+    do_parse!(
+        left_expression: string_expression >>
+        space0 >>
+        relation: equality_relation >>
+        space0 >>
+        right_expression: string_expression >>
+        (RelationalExpression::StringComparison(left_expression, relation, right_expression))
+    ))
+);
 
 named!(return_statement<CompleteStr, Statement>,
     do_parse!(

@@ -11,6 +11,7 @@ struct State {
     numeric_values: HashMap<NumericVariable, f64>,
     string_values: HashMap<StringVariable, String>,
     stack: Vec<u16>,
+    columnar_position: usize,
 }
 
 fn evaluate_numeric_variable(variable: &NumericVariable, state: &State) -> Result<f64, Error> {
@@ -62,7 +63,7 @@ fn evaluate_numeric_expression(
 fn evaluate_print<W>(
     line_number: u16,
     statement: &PrintStatement,
-    state: &State,
+    state: &mut State,
     output: &mut W,
     err_output: &mut W,
 ) -> Result<(), Error>
@@ -73,7 +74,7 @@ where
     const NUM_PRINT_ZONES: usize = 5;
     const PRINT_ZONE_WIDTH: usize = COLUMN_WIDTH / NUM_PRINT_ZONES;
 
-    let mut columnar_position = 0;
+    let mut columnar_position = state.columnar_position;
     for item in &statement.list {
         match item {
             PrintItem::Expression(expression) => match expression {
@@ -108,7 +109,7 @@ where
                 }
 
                 write!(output, "{:1$}", "", tab_width - columnar_position - 1);
-                columnar_position += tab_width - 1;
+                columnar_position = tab_width - 1;
             }
             PrintItem::Comma => {
                 let current_print_zone = columnar_position / PRINT_ZONE_WIDTH;
@@ -128,6 +129,7 @@ where
             PrintItem::Semicolon => (),
         }
     }
+    state.columnar_position = columnar_position;
 
     let last_item_is_comma_or_semicolon = statement
         .list
@@ -136,8 +138,10 @@ where
             PrintItem::Semicolon => true,
             PrintItem::Comma => true,
             _ => false,
-        }).unwrap_or(false);
+        })
+        .unwrap_or(false);
     if !last_item_is_comma_or_semicolon {
+        state.columnar_position = 0;
         write!(output, "\n");
     }
 
@@ -181,6 +185,45 @@ fn evaluate_let(statement: &LetStatement, state: &mut State) -> Result<(), Error
     Ok(())
 }
 
+fn evaluate_if(
+    if_statement: &RelationalExpression,
+    line_number: &u16,
+    state: &State,
+) -> Result<bool, Error> {
+    match if_statement {
+        RelationalExpression::StringComparison(
+            left_string_expression,
+            relation,
+            right_string_expression,
+        ) => {
+            let left = evaluate_string_expression(left_string_expression, state)?;
+            let right = evaluate_string_expression(right_string_expression, state)?;
+
+            match relation {
+                EqualityRelation::EqualTo => Ok(left == right),
+                EqualityRelation::NotEqualTo => Ok(left != right),
+            }
+        }
+        RelationalExpression::NumericComparison(
+            left_numeric_expression,
+            relation,
+            right_numeric_expression,
+        ) => {
+            let left = evaluate_numeric_expression(left_numeric_expression, state)?;
+            let right = evaluate_numeric_expression(right_numeric_expression, state)?;
+
+            Ok(match relation {
+                Relation::LessThan => left < right,
+                Relation::LessThanOrEqualTo => left <= right,
+                Relation::EqualTo => left == right,
+                Relation::GreaterThanOrEqualTo => left >= right,
+                Relation::GreaterThan => left > right,
+                Relation::NotEqualTo => left != right,
+            })
+        }
+    }
+}
+
 #[derive(Debug)]
 enum Action {
     NextLine,
@@ -212,6 +255,13 @@ where
         }
         Statement::Goto(line_number) => Action::Goto(*line_number),
         Statement::Gosub(line_number) => Action::Gosub(*line_number),
+        Statement::IfThen(if_statement, line_number) => {
+            if evaluate_if(if_statement, line_number, state)? {
+                Action::Goto(*line_number)
+            } else {
+                Action::NextLine
+            }
+        }
         Statement::Rem => Action::NextLine,
         Statement::Return => Action::Return,
         Statement::Stop => Action::Stop,

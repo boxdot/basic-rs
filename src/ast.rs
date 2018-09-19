@@ -22,13 +22,11 @@ impl Program {
 
         if let Some(end_statement_pos) = end_statement_pos {
             if end_statement_pos + 1 != blocks.len() {
-                let line_numbers =
-                    blocks
-                        .into_iter()
-                        .skip(end_statement_pos + 1)
-                        .map(|b| match b {
-                            Block::Line { line_number, .. } => line_number,
-                        });
+                let line_numbers = blocks.into_iter().skip(end_statement_pos + 1).map(
+                    |b| match b {
+                        Block::Line { line_number, .. } => line_number,
+                    },
+                );
                 Err(Error::StatementsAfterEnd {
                     line_numbers: line_numbers.collect(),
                 })
@@ -45,7 +43,8 @@ impl Program {
                     .last()
                     .map(|b| match b {
                         Block::Line { line_number, .. } => *line_number,
-                    }).unwrap_or(0u16),
+                    })
+                    .unwrap_or(0u16),
             })
         }
     }
@@ -94,11 +93,18 @@ pub enum Block {
 }
 
 #[derive(Debug, PartialEq)]
+pub enum RelationalExpression {
+    NumericComparison(NumericExpression, Relation, NumericExpression),
+    StringComparison(StringExpression, EqualityRelation, StringExpression),
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Statement {
     Print(PrintStatement),
     Let(LetStatement),
     Goto(u16),
     Gosub(u16),
+    IfThen(RelationalExpression, u16),
     Rem,
     Return,
     Stop,
@@ -282,6 +288,24 @@ pub enum LetStatement {
         variable: StringVariable,
         expression: StringExpression,
     },
+}
+
+// 12. Control statements
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Relation {
+    LessThan,
+    LessThanOrEqualTo,
+    EqualTo,
+    GreaterThan,
+    GreaterThanOrEqualTo,
+    NotEqualTo,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum EqualityRelation {
+    EqualTo,
+    NotEqualTo,
 }
 
 // 14. PRINT statement
