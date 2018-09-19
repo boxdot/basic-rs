@@ -1,0 +1,3 @@
+770: error: redimensioned variable A
+ DIM A(14)
+     ^

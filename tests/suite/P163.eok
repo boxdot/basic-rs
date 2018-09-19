@@ -1,0 +1,3 @@
+210: error: undefined function FNA
+ LET A=FNA(1)
+       ^

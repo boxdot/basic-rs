@@ -1,0 +1,3 @@
+270: error: string expression expected 
+ LET A$=X
+        ^
