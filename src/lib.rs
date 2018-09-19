@@ -28,7 +28,7 @@ pub fn execute(input: &str) -> Result<(String, String), Error> {
             nom::ErrorKind::Custom(err_code),
         ))) => {
             // Unfortunately, without enabling dynamic error handling in NOM, we don't
-            // precise context where the error happened. So, we just backtrack the line
+            // get precise context where the error happened. So, we just backtrack the line
             // where the remaining non-parsed source code begins in input.
             let line = backtrack_line(input, source_code);
             let stderr = parser::ErrorCode::from(err_code)
