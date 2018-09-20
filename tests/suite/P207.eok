@@ -1,0 +1,3 @@
+270: error: numeric expression expected 
+ LET X=A$
+       ^

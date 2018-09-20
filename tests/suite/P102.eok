@@ -1,0 +1,6 @@
+290: error: invalid characters found 
+ DATA ABC,D?F,GHI
+           ^
+290: error: syntax error 
+ DATA ABC,D?F,GHI
+           ^

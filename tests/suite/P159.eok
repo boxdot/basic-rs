@@ -1,0 +1,6 @@
+250: error: numeric variable name expected 
+ DEF FND(R$)=R+3
+         ^
+340: error: numeric expression expected 
+ LET A=FND(R$)
+           ^
