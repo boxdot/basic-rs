@@ -129,6 +129,7 @@ named!(statement<Span, (Statement, Span)>,
 named!(numeric_constant<Span, f64>,
     do_parse!(
         sign: opt!(sign) >>
+        space0 >>
         numeric_rep: numeric_rep >>
         (sign.unwrap_or(Sign::Pos) * numeric_rep)
     ));
@@ -211,22 +212,29 @@ named!(string_expression<Span, StringExpression>,
 named!(numeric_expression<Span, NumericExpression>,
     do_parse!(
         leading_sign: opt!(sign) >>
+        space0 >>
         leading_term: term >>
-        terms: many0!(pair!(sign, term)) >>
+        terms: many0!(pair!(
+            preceded!(space0, sign),
+            preceded!(space0, term))) >>
         (NumericExpression::new(leading_sign, leading_term, terms))
     ));
 
 named!(term<Span, Term>,
     do_parse!(
         leading_factor: factor >>
-        factors: many0!(pair!(multiplier, factor)) >>
+        factors: many0!(pair!(
+            preceded!(space0, multiplier),
+            preceded!(space0, factor))) >>
         (Term::new(leading_factor, factors))
     ));
 
 named!(factor<Span, Factor>,
     do_parse!(
         leading_primary: primary >>
-        primaries: many0!(preceded!(char!('^'), primary)) >>
+        primaries: many0!(preceded!(
+            preceded!(space0, char!('^')),
+            preceded!(space0, primary))) >>
         (Factor::new(leading_primary, primaries))
     ));
 
@@ -239,8 +247,8 @@ named!(multiplier<Span, Multiplier>,
 named!(primary<Span, Primary>,
     alt!(
         map!(numeric_variable, Primary::Variable) |
-        map!(numeric_rep, Primary::Constant)
-        // map!(delimited!(char!('('), numeric_expression, char!(')')), Primary::Expression)
+        map!(numeric_rep, Primary::Constant) |
+        map!(delimited!(char!('('), numeric_expression, char!(')')), Primary::Expression)
     ));
 
 named!(relation<Span, Relation>,
