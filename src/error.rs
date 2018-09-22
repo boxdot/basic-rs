@@ -16,8 +16,6 @@ pub enum Error {
         src_line_number: u16,
     },
     InvalidTabCall,
-    UndefinedNumericVariable(NumericVariable),
-    UndefinedStringVariable(StringVariable),
     DuplicateLineNumber {
         line_number: u16,
     },
@@ -53,12 +51,6 @@ impl fmt::Display for Error {
                 src_line_number
             ),
             Error::InvalidTabCall => write!(f, "error: invalid TAB call"),
-            Error::UndefinedNumericVariable(ref variable) => {
-                write!(f, "error: undefined numeric variable '{}'", variable)
-            }
-            Error::UndefinedStringVariable(ref variable) => {
-                write!(f, "error: undefined string variable '{}'", variable)
-            }
             Error::DuplicateLineNumber { line_number } => {
                 write!(f, "error: duplicate line number {}", line_number)
             }

@@ -15,11 +15,7 @@ struct State {
 }
 
 fn evaluate_numeric_variable(variable: &NumericVariable, state: &State) -> Result<f64, Error> {
-    state
-        .numeric_values
-        .get(variable)
-        .cloned()
-        .ok_or_else(|| Error::UndefinedNumericVariable(*variable))
+    Ok(state.numeric_values.get(variable).cloned().unwrap_or(0f64))
 }
 
 fn evaluate_primary(primary: &Primary, state: &State) -> Result<f64, Error> {
@@ -156,7 +152,8 @@ fn evaluate_string_expression<'a>(
             let value = state
                 .string_values
                 .get(variable)
-                .ok_or_else(|| Error::UndefinedStringVariable(*variable))?;
+                .map(|s| -> &str { s })
+                .unwrap_or("");
             Ok(value)
         }
         StringExpression::Constant(constant) => Ok(&constant.0),
