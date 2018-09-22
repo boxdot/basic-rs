@@ -4,13 +4,14 @@ extern crate nom;
 extern crate nom_locate;
 extern crate itertools;
 
-use nom::types::CompleteStr;
-
 mod ast;
 mod error;
 mod format;
 mod interpreter;
 mod parser;
+
+use interpreter::Interpreter;
+use nom::types::CompleteStr;
 
 pub use error::Error;
 
@@ -23,7 +24,15 @@ pub fn execute(input: &str) -> Result<(String, String), Error> {
                 remaining.fragment
             )))
         } else {
-            interpreter::evaluate(&ast?, input)
+            let mut stdout = Vec::new();
+            let mut stderr = Vec::new();
+            let ast = ast?;
+            let interpreter = Interpreter::new(&ast, input);
+            interpreter.evaluate(&mut stdout, &mut stderr)?;
+            Ok((
+                String::from_utf8(stdout).unwrap(),
+                String::from_utf8(stderr).unwrap(),
+            ))
         },
         Err(nom::Err::Failure(nom::simple_errors::Context::Code(
             position,

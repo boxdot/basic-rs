@@ -48,6 +48,7 @@ fn run_and_compare_output(program: &str, expected_output: &str, expected_err_out
             );
         }
         Err(e) => {
+            assert!(expected_output.is_empty());
             let stderr = format!("{}", e);
             assert_eq!(
                 stderr,
@@ -97,11 +98,11 @@ test_program!(P024);
 test_program!(P025);
 test_program!(P026);
 try_test_program!(P027);
-try_test_program!(P028);
-try_test_program!(P029);
-try_test_program!(P030);
-try_test_program!(P031);
-try_test_program!(P032);
+test_program!(P028);
+test_program!(P029);
+test_program!(P030);
+test_program!(P031);
+test_program!(P032);
 test_program!(P033);
 test_program!(P034);
 try_test_program!(P035);
