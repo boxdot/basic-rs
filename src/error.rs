@@ -16,14 +16,13 @@ pub enum Error {
         src_line_number: u16,
     },
     InvalidTabCall,
-    UndefinedNumericVariable(NumericVariable),
-    UndefinedStringVariable(StringVariable),
     DuplicateLineNumber {
         line_number: u16,
     },
     UndefinedLineNumber {
         src_line_number: u16,
         line_number: u16,
+        statement_source: String,
     },
     UnexpectedReturn {
         src_line_number: u16,
@@ -52,22 +51,23 @@ impl fmt::Display for Error {
                 src_line_number
             ),
             Error::InvalidTabCall => write!(f, "error: invalid TAB call"),
-            Error::UndefinedNumericVariable(ref variable) => {
-                write!(f, "error: undefined numeric variable '{}'", variable)
-            }
-            Error::UndefinedStringVariable(ref variable) => {
-                write!(f, "error: undefined string variable '{}'", variable)
-            }
             Error::DuplicateLineNumber { line_number } => {
                 write!(f, "error: duplicate line number {}", line_number)
             }
             Error::UndefinedLineNumber {
                 src_line_number,
                 line_number,
+                ref statement_source,
             } => write!(
                 f,
-                "{}: error: non-existing line number \n GOTO {}\n      ^\n",
-                src_line_number, line_number
+                "{}: error: non-existing line number \n {}\n{:cursor$}^\n",
+                src_line_number,
+                statement_source,
+                "",
+                cursor = statement_source
+                    .find(&format!("{}", line_number))
+                    .unwrap_or(0)
+                    + 1
             ),
             Error::UnexpectedReturn { src_line_number } => {
                 write!(f, "{}: error: unexpected return\n", src_line_number)
