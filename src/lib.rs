@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate nom;
+#[macro_use]
+extern crate nom_locate;
 extern crate itertools;
 
 use nom::types::CompleteStr;
@@ -13,26 +15,23 @@ mod parser;
 pub use error::Error;
 
 pub fn execute(input: &str) -> Result<(String, String), Error> {
-    let res = parser::program(CompleteStr(input));
+    let res = parser::program(parser::Span::new(CompleteStr(input)));
     match res {
-        Ok((remaining, ast)) => if !remaining.is_empty() {
+        Ok((remaining, ast)) => if !remaining.fragment.is_empty() {
             Err(Error::Parser(format!(
                 "failed to parse program fully, remaining statements:\n{}",
-                remaining
+                remaining.fragment
             )))
         } else {
             interpreter::evaluate(&ast?)
         },
         Err(nom::Err::Failure(nom::simple_errors::Context::Code(
-            source_code,
+            position,
             nom::ErrorKind::Custom(err_code),
         ))) => {
-            // Unfortunately, without enabling dynamic error handling in NOM, we don't
-            // get precise context where the error happened. So, we just backtrack the line
-            // where the remaining non-parsed source code begins in input.
-            let line = backtrack_line(input, source_code);
+            let line = input.lines().nth(position.line as usize - 1).unwrap();
             let stderr = parser::ErrorCode::from(err_code)
-                .to_string(&line, source_code.lines().next().unwrap_or(""))
+                .to_string(line, &position.fragment.lines().next().unwrap())
                 .unwrap_or_else(|| format!("{}", err_code));
             Ok((String::new(), stderr))
         }
@@ -41,15 +40,4 @@ pub fn execute(input: &str) -> Result<(String, String), Error> {
             Ok((String::new(), stderr))
         }
     }
-}
-
-/// Finds and returns the full line where `remaining` starts in `input`.
-fn backtrack_line<'a>(input: &'a str, remaining: CompleteStr) -> &'a str {
-    let num_remaining_lines = remaining.lines().count();
-    input
-        .lines()
-        .rev()
-        .skip(num_remaining_lines.checked_sub(1).unwrap_or(0))
-        .next()
-        .expect("logic error")
 }

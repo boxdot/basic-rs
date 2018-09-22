@@ -5,6 +5,7 @@ dependencies = [
  "diff 0.1.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "itertools 0.7.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "nom 4.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "nom_locate 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -17,6 +18,11 @@ dependencies = [
  "wasm-bindgen 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "wee_alloc 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "bytecount"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "cfg-if"
@@ -95,6 +101,16 @@ version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "memchr 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "nom_locate"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "bytecount 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "memchr 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "nom 4.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -260,6 +276,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [metadata]
+"checksum bytecount 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "f861d9ce359f56dbcb6e0c2a1cb84e52ad732cadb57b806adeb3c7668caccbd8"
 "checksum cfg-if 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "0c4e7bb64a8ebb0d856483e1e682ea3422f883c5f5615a90d51a2c82fe87fdd3"
 "checksum console_error_panic_hook 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "6c5dd2c094474ec60a6acaf31780af270275e3153bafff2db5995b715295762e"
 "checksum diff 0.1.11 (registry+https://github.com/rust-lang/crates.io-index)" = "3c2b69f912779fbb121ceb775d74d51e915af17aaebc38d28a592843a2dd0a3a"
@@ -272,6 +289,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum memchr 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "796fba70e76612589ed2ce7f45282f5af869e0fdd7cc6199fa1aa1f1d591ba9d"
 "checksum memory_units 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "8452105ba047068f40ff7093dd1d9da90898e63dd61736462e9cdda6a90ad3c3"
 "checksum nom 4.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "898696750eb5c3ce5eb5afbfbe46e7f7c4e1936e19d3e97be4b7937da7b6d114"
+"checksum nom_locate 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "6a47c112b3861d81f7fbf73892b9271af933af32bd5dee6889aa3c3fa9caed7e"
 "checksum proc-macro2 0.4.19 (registry+https://github.com/rust-lang/crates.io-index)" = "ffe022fb8c8bd254524b0b3305906c1921fa37a84a644e29079a9e62200c3901"
 "checksum quote 0.6.8 (registry+https://github.com/rust-lang/crates.io-index)" = "dd636425967c33af890042c483632d33fa7a18f19ad1d7ea72e8998c6ef8dea5"
 "checksum ryu 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "7153dd96dade874ab973e098cb62fcdbb89a03682e46b144fd09550998d4a4a7"

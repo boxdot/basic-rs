@@ -138,8 +138,7 @@ where
             PrintItem::Semicolon => true,
             PrintItem::Comma => true,
             _ => false,
-        })
-        .unwrap_or(false);
+        }).unwrap_or(false);
     if !last_item_is_comma_or_semicolon {
         state.columnar_position = 0;
         write!(output, "\n");
@@ -277,10 +276,11 @@ pub fn evaluate(program: &Program) -> Result<(String, String), Error> {
 
     let mut block = program.first_block();
     loop {
-        let (action, src_line_number) = match block {
+        let (action, src_line_number, statement_source) = match block {
             Block::Line {
                 line_number,
                 statement,
+                statement_source,
             } => (
                 evaluate_statement(
                     *line_number,
@@ -290,8 +290,11 @@ pub fn evaluate(program: &Program) -> Result<(String, String), Error> {
                     &mut err_output,
                 )?,
                 *line_number,
+                statement_source,
             ),
         };
+
+        println!("{:?}", statement_source);
 
         match action {
             Action::NextLine => block = program.next_block(block),
