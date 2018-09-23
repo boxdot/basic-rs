@@ -119,6 +119,8 @@ named!(statement<Span, (Statement, Span)>,
             print_statement |
             return_statement |
             stop_statement |
+            read_statement |
+            data_statement |
             remark_statement |
             end_statement) >>
         (statement, statement_source)
@@ -179,6 +181,19 @@ named!(string_constant<Span, StringConstant>,
     ));
 
 // 7. Variables
+
+named!(variable<Span, Variable>,
+    alt!(
+        do_parse!(
+            var: numeric_variable >>
+            (Variable::Numeric(var))
+        ) |
+        do_parse!(
+            var: string_variable >>
+            (Variable::String(var))
+        )
+    )
+);
 
 named!(numeric_variable<Span, NumericVariable>,
     alt!(simple_numeric_variable));
@@ -416,6 +431,52 @@ named!(print_separator<Span, PrintItem>,
         char!(',') => { |_| PrintItem::Comma } |
         char!(';') => { |_| PrintItem::Semicolon }
     )), space0));
+
+// 16. READ and RESTORE statements
+
+named!(read_statement<Span, Statement>,
+    do_parse!(
+        tag!("READ") >>
+        space0 >>
+        variables: many1!(
+            do_parse!(
+                space0 >>
+                opt!(char!(',')) >>
+                space0 >>
+                variable: variable >>
+                (variable)
+            )
+        ) >>
+        (Statement::Read(variables))
+    )
+);
+
+named!(restore_statement<Span, Statement>,
+    do_parse!(
+        tag!("RESTORE") >>
+        space0 >>
+        (Statement::Restore)
+    )
+);
+
+// 17. DATA statement
+
+named!(data_statement<Span, Statement>, 
+    do_parse!(
+        tag!("DATA") >>
+        space0 >>
+        datum: many1!(
+            do_parse!(
+                space0 >>
+                opt!(char!(',')) >>
+                space0 >>
+                expression: expression >>
+                (expression)
+            )
+        ) >>
+        (Statement::Data(datum))
+    )
+);
 
 // 19. REMARK statement
 

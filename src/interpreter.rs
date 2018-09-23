@@ -321,6 +321,25 @@ impl<'a> Interpreter<'a> {
             .fold_results(0.0, |acc, (sign, term)| acc + *sign * term)
     }
 
+    fn evaluate_read(variables: &Vec<Variable>, state: &mut State) -> Result<(), Error> {
+        for variable in variables {
+            let data = state.datum.get(state.data_pointer).unwrap(); // TODO: remove unwrap
+            match (variable, data) {
+                (Variable::Numeric(numeric_variable), Expression::Numeric(numeric_expression)) => {
+                    let value = evaluate_numeric_expression(numeric_expression, state)?;
+                    state.numeric_values.insert(*numeric_variable, value);
+                }
+                (Variable::String(string_variable), Expression::String(string_expression)) => {
+                    let value = String::from(evaluate_string_expression(string_expression, state)?);
+                    state.string_values.insert(*string_variable, value);
+                }
+                (_, _) => panic!("GOODBYE!"), // TODO: add error message
+            }
+            state.data_pointer += 1;
+        }
+        Ok(())
+    }
+
     fn evaluate_term<W: Write>(&self, term: &Term, stderr: &mut W) -> Result<f64, Error> {
         let mut acc = self.evaluate_factor(&term.factor, stderr)?;
         for (multiplier, factor) in &term.factors {

@@ -108,6 +108,9 @@ pub enum Statement {
     Goto(u16),
     Gosub(u16),
     IfThen(RelationalExpression, u16),
+    Read(Vec<Variable>),
+    Data(Vec<Expression>),
+    Restore,
     Rem,
     Return,
     Stop,
@@ -152,7 +155,7 @@ impl ops::Mul<i32> for Sign {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StringConstant(pub String);
 
 // 7. Variable
@@ -186,7 +189,7 @@ impl fmt::Display for StringVariable {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Variable {
     Numeric(NumericVariable),
     String(StringVariable),
@@ -194,13 +197,13 @@ pub enum Variable {
 
 // 8. Expressions
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Numeric(NumericExpression),
     String(StringExpression),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NumericExpression {
     pub terms: Vec<(Sign, Term)>,
 }
@@ -225,7 +228,7 @@ impl NumericExpression {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Term {
     pub factor: Factor,
     pub factors: Vec<(Multiplier, Factor)>,
@@ -237,7 +240,7 @@ impl Term {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Factor {
     pub primaries: Vec<Primary>,
 }
@@ -250,20 +253,20 @@ impl Factor {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Multiplier {
     Mul,
     Div,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Primary {
     Variable(NumericVariable),
     Constant(f64, i32),
     Expression(NumericExpression),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StringExpression {
     Variable(StringVariable),
     Constant(StringConstant),
