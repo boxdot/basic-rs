@@ -30,6 +30,9 @@ pub enum Error {
         value: f64,
         exp: f64,
     },
+    MissingData {
+        src_line_number: u16,
+    },
 }
 
 impl<'a> convert::From<nom::Err<CompleteStr<'a>>> for Error {
@@ -88,6 +91,9 @@ impl fmt::Display for Error {
                 "{}: error: negative value raised to non-integral value ({} ^ {})\n",
                 src_line_number, value, exp
             ),
+            Error::MissingData { src_line_number } => {
+                write!(f, "{}: error: missing data\n", src_line_number)
+            }
         }
     }
 }

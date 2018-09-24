@@ -27,6 +27,8 @@ struct State {
     string_values: HashMap<StringVariable, String>,
     /// stack of return line numbers for routines
     stack: Vec<u16>,
+    /// DATA statement pointer
+    data_pointer: u16,
 }
 
 #[derive(Debug)]
@@ -139,6 +141,15 @@ impl<'a> Interpreter<'a> {
                     Action::NextLine
                 }
             }
+            Statement::Read(variables) => {
+                self.evaluate_read(variables, stderr)?;
+                Action::NextLine
+            }
+            Statement::Restore => {
+                self.state.data_pointer = 0;
+                Action::NextLine
+            }
+            Statement::Data(datum) => Action::NextLine,
             Statement::Rem => Action::NextLine,
             Statement::Return => Action::Return,
             Statement::Stop => Action::Stop,
@@ -321,21 +332,31 @@ impl<'a> Interpreter<'a> {
             .fold_results(0.0, |acc, (sign, term)| acc + *sign * term)
     }
 
-    fn evaluate_read(variables: &Vec<Variable>, state: &mut State) -> Result<(), Error> {
+    fn evaluate_read<W: Write>(
+        &mut self,
+        variables: &Vec<Variable>,
+        stderr: &mut W,
+    ) -> Result<(), Error> {
         for variable in variables {
-            let data = state.datum.get(state.data_pointer).unwrap(); // TODO: remove unwrap
+            let data = self
+                .program
+                .datum
+                .get(self.state.data_pointer as usize)
+                .ok_or_else(|| Error::MissingData {
+                    src_line_number: self.state.current_line_number,
+                })?;
             match (variable, data) {
                 (Variable::Numeric(numeric_variable), Expression::Numeric(numeric_expression)) => {
-                    let value = evaluate_numeric_expression(numeric_expression, state)?;
-                    state.numeric_values.insert(*numeric_variable, value);
+                    let value = self.evaluate_numeric_expression(&numeric_expression, stderr)?;
+                    self.state.numeric_values.insert(*numeric_variable, value);
                 }
                 (Variable::String(string_variable), Expression::String(string_expression)) => {
-                    let value = String::from(evaluate_string_expression(string_expression, state)?);
-                    state.string_values.insert(*string_variable, value);
+                    let value = String::from(self.evaluate_string_expression(&string_expression)?);
+                    self.state.string_values.insert(*string_variable, value);
                 }
                 (_, _) => panic!("GOODBYE!"), // TODO: add error message
             }
-            state.data_pointer += 1;
+            self.state.data_pointer += 1;
         }
         Ok(())
     }
