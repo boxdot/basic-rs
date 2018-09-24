@@ -71,7 +71,8 @@ impl<'a> Program<'a> {
         let mut program_blocks = Vec::new();
         let mut block_index = HashMap::new();
         let mut datum = Vec::new();
-        for (index, block) in blocks.drain(..).enumerate() {
+        let mut index = 0;
+        for block in blocks.drain(..) {
             match block {
                 Block::Line {
                     line_number,
@@ -82,6 +83,7 @@ impl<'a> Program<'a> {
                         datum.append(&mut statement_datum);
                     }
                     _ => {
+                        index += 1;
                         if block_index.insert(line_number, index).is_some() {
                             return Err(Error::DuplicateLineNumber { line_number });
                         }
