@@ -354,7 +354,12 @@ impl<'a> Interpreter<'a> {
                     let value = String::from(self.evaluate_string_expression(&string_expression)?);
                     self.state.string_values.insert(*string_variable, value);
                 }
-                (_, _) => panic!("GOODBYE!"), // TODO: add error message
+                (_, _) => {
+                    return Err(Error::ReadDatatypeMismatch {
+                        src_line_number: self.state.current_line_number,
+                        data_pointer: self.state.data_pointer,
+                    })
+                }
             }
             self.state.data_pointer += 1;
         }
