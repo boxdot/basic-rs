@@ -83,10 +83,10 @@ impl<'a> Program<'a> {
                         datum.append(&mut statement_datum);
                     }
                     _ => {
-                        index += 1;
                         if block_index.insert(line_number, index).is_some() {
                             return Err(Error::DuplicateLineNumber { line_number });
                         }
+                        index += 1;
                         program_blocks.push(Block::Line {
                             line_number,
                             statement,
