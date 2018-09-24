@@ -34,9 +34,18 @@ fn run_and_compare_output(program: &str, expected_output: &str, expected_err_out
     let res = basic::execute(&program);
     match res {
         Ok((output, err_output)) => {
-            assert!(
-                !output.contains("FAIL")
-            );
+            if expected_output.contains("TEST PASSED") {
+                assert!(
+                    output.contains("TEST PASSED")
+                );
+            } else {
+                assert_eq!(
+                    output,
+                    expected_output,
+                    "\nDiff:\n{}\n",
+                    diff(&output, expected_output)
+                );
+            }
             assert_eq!(
                 err_output,
                 expected_err_output,
@@ -106,11 +115,11 @@ try_test_program!(P035);
 try_test_program!(P036);
 try_test_program!(P037);
 try_test_program!(P038);
-try_test_program!(P039);
-try_test_program!(P040);
+test_program!(P039);
+test_program!(P040);
 test_program!(P041);
 test_program!(P042);
-try_test_program!(P043);
+test_program!(P043);
 try_test_program!(P044);
 try_test_program!(P045);
 try_test_program!(P046);

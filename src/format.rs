@@ -6,7 +6,6 @@ use std::str;
 pub fn format_float(value: f64) -> String {
     const SIGNIFICANCE_WIDTH: usize = 6;
     // const EXTRAD_WIDTH: usize = 2;
-    println!("f64 value: {}", value);
 
     if value == 0.0 {
         return " 0 ".into();
@@ -31,7 +30,6 @@ pub fn format_float(value: f64) -> String {
     if integ.len() + fract.len() > SIGNIFICANCE_WIDTH {
         // explicit point scaled notation
         let value_str = format!("{:.width$E}", value.abs(), width = SIGNIFICANCE_WIDTH - 1);
-        println!("value_str: {}", value_str);
         let mut parts = value_str.split('E');
         let significant = parts.next().unwrap();
         let extrad = parts.next().unwrap();
