@@ -8,8 +8,13 @@ use nom_locate::LocatedSpan;
 use std::fmt;
 use std::num;
 
+/// Captures the offset, line number and remaining text for the current position of the parser.
 pub type Span<'a> = LocatedSpan<CompleteStr<'a>>;
 
+/// Parser error codes.
+///
+/// We use a nom's simple error flavour, which only allows to return error codes
+/// when parser fails.
 pub enum ErrorCode {
     ExpectedStringExpression,
     Unknown,

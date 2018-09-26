@@ -35,9 +35,6 @@ pub fn execute(input: &str) -> Result<(String, String), Error> {
                 .unwrap_or_else(|| format!("{}", err_code));
             Ok((String::new(), stderr))
         }
-        Err(e) => {
-            let stderr = format!("{}", e);
-            Ok((String::new(), stderr))
-        }
+        Err(e) => Err(Error::Parser(format!("parser error: {}", e))),
     }
 }
