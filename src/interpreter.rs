@@ -15,7 +15,7 @@ struct State {
 }
 
 fn evaluate_numeric_variable(variable: &NumericVariable, state: &State) -> Result<f64, Error> {
-    Ok(state.numeric_values.get(variable).cloned().unwrap_or(0f64))
+    Ok(state.numeric_values.get(variable).cloned().unwrap_or(0.0))
 }
 
 fn evaluate_primary(primary: &Primary, state: &State) -> Result<f64, Error> {
