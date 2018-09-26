@@ -115,7 +115,10 @@ named!(statement<Span, (Statement, Span)>,
             goto_statement |
             gosub_statement |
             if_then_statement |
+            on_goto_statement |
             let_statement |
+            for_statement | 
+            next_statement |
             print_statement |
             return_statement |
             stop_statement |
@@ -391,11 +394,70 @@ named!(return_statement<Span, Statement>,
         (Statement::Return)
     ));
 
+named!(on_goto_statement<Span, Statement>, 
+    do_parse!(
+        tag!("ON") >>
+        space0 >>
+        numeric_variable: numeric_variable >> // looks like there's a typo in the ECMA spec
+        space0 >>
+        tag!("GO") >>
+        space0 >>
+        tag!("TO") >>
+        space0 >>
+        line_numbers: separated_nonempty_list!(char!(','), line_number) >>
+        (Statement::OnGoto(OnGotoStatement { numeric_variable, line_numbers }))
+));
+
 named!(stop_statement<Span, Statement>,
     do_parse!(
         tag!("STOP") >>
         (Statement::Stop)
     ));
+
+// 13. FOR and NEXT statements
+
+
+named!(for_statement<Span, Statement>,
+    do_parse!(
+        tag!("FOR") >>
+        space0 >>
+        control_variable: simple_numeric_variable >>
+        space0 >>
+        tag!("=") >>
+        space0 >>
+        initial_value: numeric_expression >>
+        space0 >>
+        tag!("TO") >>
+        space0 >>
+        limit: numeric_expression >>
+        space0 >>
+        increment: opt!(step_increment) >>
+        (Statement::For(
+            ForStatement {
+                control_variable, 
+                initial_value, 
+                limit, 
+                increment: increment.unwrap_or(NumericExpression::with_constant(1.0))
+            })
+        )
+));
+
+named!(next_statement<Span, Statement>,
+    do_parse!(
+        tag!("NEXT") >>
+        space0 >>
+        control_variable: simple_numeric_variable >>
+        (Statement::Next(control_variable))
+    )
+);
+
+named!(step_increment<Span, NumericExpression>,
+    do_parse!(
+        tag!("STEP") >>
+        space0 >>
+        numeric_expression: numeric_expression >>
+        (numeric_expression)
+));
 
 // 14. PRINT statement
 

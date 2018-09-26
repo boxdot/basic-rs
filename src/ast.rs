@@ -120,12 +120,29 @@ pub enum RelationalExpression {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct ForStatement {
+    pub control_variable: NumericVariable,
+    pub initial_value: NumericExpression,
+    pub limit: NumericExpression,
+    pub increment: NumericExpression,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct OnGotoStatement {
+    pub numeric_variable: NumericVariable,
+    pub line_numbers: Vec<u16>,
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Statement {
     Print(PrintStatement),
     Let(LetStatement),
     Goto(u16),
     Gosub(u16),
     IfThen(RelationalExpression, u16),
+    OnGoto(OnGotoStatement),
+    For(ForStatement),
+    Next(NumericVariable),
     Read(Vec<Variable>),
     Data(Vec<Expression>),
     Restore,
@@ -233,7 +250,6 @@ impl NumericExpression {
         Self { terms: all_terms }
     }
 
-    #[cfg(test)]
     pub fn with_constant(value: f64) -> Self {
         NumericExpression::new(
             Some(if value >= 0.0 { Sign::Pos } else { Sign::Neg }),

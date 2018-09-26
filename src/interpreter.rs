@@ -141,6 +141,9 @@ impl<'a> Interpreter<'a> {
                     Action::NextLine
                 }
             }
+            Statement::OnGoto(ongoto_statement) => unimplemented!(),
+            Statement::For(for_statement) => unimplemented!(),
+            Statement::Next(control_variable) => unimplemented!(),
             Statement::Read(variables) => {
                 self.evaluate_read(variables, stderr)?;
                 Action::NextLine
