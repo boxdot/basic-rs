@@ -66,17 +66,21 @@ impl fmt::Display for Error {
                 src_line_number,
                 line_number,
                 ref statement_source,
-            } => write!(
-                f,
-                "{}: error: non-existing line number \n {}\n{:cursor$}^\n",
-                src_line_number,
-                statement_source,
-                "",
-                cursor = statement_source
+            } => {
+                // find the position of a line number in the statement source code
+                let line_number_position = statement_source
                     .find(&format!("{}", line_number))
                     .unwrap_or(0)
-                    + 1
-            ),
+                    + 1;
+                write!(
+                    f,
+                    "{}: error: non-existing line number \n {}\n{:cursor$}^\n",
+                    src_line_number,
+                    statement_source,
+                    "",
+                    cursor = line_number_position
+                )
+            }
             Error::UnexpectedReturn { src_line_number } => {
                 write!(f, "{}: error: unexpected return\n", src_line_number)
             }

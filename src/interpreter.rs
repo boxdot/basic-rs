@@ -294,7 +294,9 @@ pub fn evaluate(program: &Program, input: &str) -> Result<(String, String), Erro
             ),
         };
 
-        let get_statement_source = || -> String {
+        // Gets the source code text of a statement from input source code
+        // based on the span pointing to it.
+        let get_statement_source_code = || -> String {
             input[statement_source.offset..]
                 .lines()
                 .next()
@@ -310,7 +312,7 @@ pub fn evaluate(program: &Program, input: &str) -> Result<(String, String), Erro
                     .ok_or_else(|| Error::UndefinedLineNumber {
                         src_line_number,
                         line_number,
-                        statement_source: get_statement_source(),
+                        statement_source: get_statement_source_code(),
                     })?;
             }
             Action::Gosub(line_number) => {
@@ -319,7 +321,7 @@ pub fn evaluate(program: &Program, input: &str) -> Result<(String, String), Erro
                     .ok_or_else(|| Error::UndefinedLineNumber {
                         src_line_number,
                         line_number,
-                        statement_source: get_statement_source(),
+                        statement_source: get_statement_source_code(),
                     })?;
                 state.stack.push(src_line_number);
             }
@@ -333,7 +335,7 @@ pub fn evaluate(program: &Program, input: &str) -> Result<(String, String), Erro
                     .ok_or_else(|| Error::UndefinedLineNumber {
                         src_line_number,
                         line_number: prev_line_number,
-                        statement_source: get_statement_source(),
+                        statement_source: get_statement_source_code(),
                     })?;
                 block = program.next_block(prev_block);
             }
