@@ -4,6 +4,7 @@ use format::format_float;
 use parser;
 
 use itertools::Itertools;
+
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -229,7 +230,8 @@ impl<'a> Interpreter<'a> {
                 PrintItem::Semicolon => true,
                 PrintItem::Comma => true,
                 _ => false,
-            }).unwrap_or(false);
+            })
+            .unwrap_or(false);
         if !last_item_is_comma_or_semicolon {
             self.state.columnar_position = 0;
             write!(stdout, "\n");
@@ -379,8 +381,8 @@ impl<'a> Interpreter<'a> {
             match multiplier {
                 Multiplier::Mul => {
                     let res = acc * factor;
-                    if acc.is_normal() && factor.is_normal() && !res.is_normal() {
-                        self.warn(stderr, "operation overflow (*) ");
+                    if res.is_infinite() {
+                        self.warn(stderr, "operation overflow (*)");
                     }
                     acc = res
                 }
@@ -406,13 +408,18 @@ impl<'a> Interpreter<'a> {
                     exp: primary,
                 });
             }
+
+            let res = acc.powf(primary);
             if acc == 0.0 && primary < 0f64 {
                 self.warn(
                     stderr,
                     &format!("zero raised to negative value ({} ^ {})", acc, primary),
                 );
+            } else if res.is_infinite() {
+                self.warn(stderr, "operation overflow");
             }
-            acc = acc.powf(primary);
+
+            acc = res;
         }
         Ok(acc)
     }
