@@ -241,12 +241,6 @@ named!(expression<Span, Expression>,
         map!(numeric_expression, Expression::Numeric)
     ));
 
-named!(string_expression<Span, StringExpression>,
-    alt!(
-        map!(string_variable, StringExpression::Variable) |
-        map!(string_constant, StringExpression::Constant)
-    ));
-
 named!(numeric_expression<Span, NumericExpression>,
     do_parse!(
         leading_sign: opt!(sign) >>
@@ -284,9 +278,40 @@ named!(multiplier<Span, Multiplier>,
 
 named!(primary<Span, Primary>,
     alt!(
+        map!(numeric_function_ref, Primary::Function) |
         map!(numeric_variable, Primary::Variable) |
         numeric_rep => { |value| Primary::Constant(NumericConstant::from(value)) } |
         map!(delimited!(char!('('), numeric_expression, char!(')')), Primary::Expression)
+    ));
+
+named!(numeric_function_ref<Span, Function>,
+    map!(pair!(numeric_supplied_function, argument_list), |(name, args)| {
+        match name.fragment.as_ref() {
+            "ABS" => Function::Abs(args),
+            "ATN" => Function::Atn(args),
+            "COS" => Function::Cos(args),
+            "EXP" => Function::Exp(args),
+            "INT" => Function::Int(args),
+            "LOG" => Function::Log(args),
+            "SGN" => Function::Sgn(args),
+            "SIN" => Function::Sin(args),
+            "SQR" => Function::Sqr(args),
+            "TAN" => Function::Tan(args),
+            _ => panic!("bug in parser"),
+        }
+    }));
+
+// for the future
+// named!(numeric_function_name<Span, NumericFunctionName>,
+//     alt!(numeric_defined_function | numeric_supplied_function));
+
+named!(argument_list<Span, NumericExpression>,
+    delimited!(char!('('), numeric_expression, char!(')')));
+
+named!(string_expression<Span, StringExpression>,
+    alt!(
+        map!(string_variable, StringExpression::Variable) |
+        map!(string_constant, StringExpression::Constant)
     ));
 
 named!(relation<Span, Relation>,
@@ -308,6 +333,22 @@ named!(equality_relation<Span, EqualityRelation>,
         tag!("<>") => { |_| EqualityRelation::NotEqualTo }
     )
 );
+
+// 9. Numeric supplied functions
+
+named!(numeric_supplied_function<Span, Span>,
+    alt!(
+        tag!("ABS") |
+        tag!("ATN") |
+        tag!("COS") |
+        tag!("EXP") |
+        tag!("INT") |
+        tag!("LOG") |
+        tag!("SGN") |
+        tag!("SIN") |
+        tag!("SQR") |
+        tag!("TAN")
+    ));
 
 // 11. LET statement
 

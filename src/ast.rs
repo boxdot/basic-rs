@@ -347,6 +347,7 @@ pub enum Multiplier {
 pub enum Primary {
     Variable(NumericVariable),
     Constant(NumericConstant),
+    Function(Function),
     Expression(NumericExpression),
 }
 
@@ -358,19 +359,19 @@ pub enum StringExpression {
 
 // 9. Implementation supplied functions
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Function {
-    Abs(f64),
-    Atn(f64),
-    Cos(f64),
-    Exp(f64),
-    Int(f64),
-    Log(f64),
+    Abs(NumericExpression),
+    Atn(NumericExpression),
+    Cos(NumericExpression),
+    Exp(NumericExpression),
+    Int(NumericExpression),
+    Log(NumericExpression),
     Rnd,
-    Sgn(f64),
-    Sin(f64),
-    Sqr(f64),
-    Tan(f64),
+    Sgn(NumericExpression),
+    Sin(NumericExpression),
+    Sqr(NumericExpression),
+    Tan(NumericExpression),
 }
 
 // 11. LET statement

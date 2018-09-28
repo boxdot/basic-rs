@@ -427,9 +427,50 @@ impl<'a> Interpreter<'a> {
         let value = match primary {
             Primary::Variable(v) => self.evaluate_numeric_variable(v)?,
             Primary::Constant(c) => self.evaluate_numeric_constant(c, stderr)?,
+            Primary::Function(f) => self.evaluate_function(f, stderr)?,
             Primary::Expression(e) => self.evaluate_numeric_expression(e, stderr)?,
         };
         Ok(value)
+    }
+
+    fn evaluate_function<W: Write>(&self, f: &Function, stderr: &mut W) -> Result<f64, Error> {
+        match f {
+            Function::Abs(expr) => self
+                .evaluate_numeric_expression(expr, stderr)
+                .map(|value| value.abs()),
+            Function::Atn(expr) => self
+                .evaluate_numeric_expression(expr, stderr)
+                .map(|value| value.atan()),
+            Function::Cos(expr) => self
+                .evaluate_numeric_expression(expr, stderr)
+                .map(|value| value.cos()),
+            Function::Exp(expr) => self
+                .evaluate_numeric_expression(expr, stderr)
+                .map(|value| value.exp()),
+            Function::Int(expr) => self
+                .evaluate_numeric_expression(expr, stderr)
+                .map(|value| value.trunc()),
+            Function::Log(expr) => self
+                .evaluate_numeric_expression(expr, stderr)
+                .map(|value| value.ln()),
+            Function::Sgn(expr) => self.evaluate_numeric_expression(expr, stderr).map(|value| {
+                if value == 0.0 {
+                    0.0
+                } else {
+                    value.signum()
+                }
+            }),
+            Function::Sin(expr) => self
+                .evaluate_numeric_expression(expr, stderr)
+                .map(|value| value.sin()),
+            Function::Sqr(expr) => self
+                .evaluate_numeric_expression(expr, stderr)
+                .map(|value| value.sqrt()),
+            Function::Tan(expr) => self
+                .evaluate_numeric_expression(expr, stderr)
+                .map(|value| value.tan()),
+            _ => unimplemented!(),
+        }
     }
 
     fn evaluate_numeric_variable(&self, variable: &NumericVariable) -> Result<f64, Error> {
