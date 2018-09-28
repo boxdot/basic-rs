@@ -39,6 +39,11 @@ pub enum Error {
         src_line_number: u16,
         data_pointer: u16,
     },
+    FunctionDomainError {
+        src_line_number: u16,
+        function: String,
+        arg: f64,
+    },
 }
 
 impl<'a> convert::From<nom::Err<Span<'a>>> for Error {
@@ -115,6 +120,15 @@ impl fmt::Display for Error {
                 f,
                 "{}: error: mismatch between read statement and DATA at position {}",
                 src_line_number, data_pointer
+            ),
+            Error::FunctionDomainError {
+                src_line_number,
+                ref function,
+                arg,
+            } => write!(
+                f,
+                "{}: error: function domain error {}({})\n",
+                src_line_number, function, arg
             ),
         }
     }

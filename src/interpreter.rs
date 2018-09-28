@@ -463,9 +463,20 @@ impl<'a> Interpreter<'a> {
             Function::Sin(expr) => self
                 .evaluate_numeric_expression(expr, stderr)
                 .map(|value| value.sin()),
-            Function::Sqr(expr) => self
-                .evaluate_numeric_expression(expr, stderr)
-                .map(|value| value.sqrt()),
+            Function::Sqr(expr) => {
+                self.evaluate_numeric_expression(expr, stderr)
+                    .and_then(|value| {
+                        if value < 0.0 {
+                            Err(Error::FunctionDomainError {
+                                src_line_number: self.state.current_line_number,
+                                function: "SQR".into(),
+                                arg: value,
+                            })
+                        } else {
+                            Ok(value.sqrt())
+                        }
+                    })
+            }
             Function::Tan(expr) => self
                 .evaluate_numeric_expression(expr, stderr)
                 .map(|value| value.tan()),
