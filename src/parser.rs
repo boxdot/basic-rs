@@ -163,9 +163,16 @@ named!(sign<Span, Sign>,
         char!('-') => { |_| Sign::Neg }
     ));
 
+// We slightly deviate from the standard and allow an optional sign here:
+// cf. test P038.
 named!(numeric_rep<Span, (f64, i32)>,
-    map!(pair!(significand, opt!(exrad)),
-        |(significand, exrad)| (significand, exrad.unwrap_or(0))));
+    do_parse!(
+        sign: opt!(sign) >>
+        space0 >>
+        significand: significand >>
+        exrad: opt!(exrad) >>
+        (sign.unwrap_or(Sign::Pos)  * significand, exrad.unwrap_or(0))
+    ));
 
 named!(significand<Span, f64>,
     alt!(
