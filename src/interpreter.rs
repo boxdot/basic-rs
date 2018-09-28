@@ -444,9 +444,19 @@ impl<'a> Interpreter<'a> {
             Function::Cos(expr) => self
                 .evaluate_numeric_expression(expr, stderr)
                 .map(|value| value.cos()),
-            Function::Exp(expr) => self
-                .evaluate_numeric_expression(expr, stderr)
-                .map(|value| value.exp()),
+            Function::Exp(expr) => self.evaluate_numeric_expression(expr, stderr).map(|value| {
+                let res = value.exp();
+                if res.is_infinite() {
+                    self.warn(
+                        stderr,
+                        format!(
+                            "operation overflow EXP({})",
+                            (value * 100.0).round() / 100.0
+                        ),
+                    );
+                }
+                res
+            }),
             Function::Int(expr) => self
                 .evaluate_numeric_expression(expr, stderr)
                 .map(|value| value.trunc()),
