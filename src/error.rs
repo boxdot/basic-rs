@@ -1,5 +1,7 @@
 use nom;
-use nom::types::CompleteStr;
+use nom::simple_errors::Context;
+
+use parser::Span;
 
 use std::convert;
 use std::fmt;
@@ -39,9 +41,17 @@ pub enum Error {
     },
 }
 
-impl<'a> convert::From<nom::Err<CompleteStr<'a>>> for Error {
-    fn from(e: nom::Err<CompleteStr<'a>>) -> Self {
-        Error::Parser(format!("{}", e))
+impl<'a> convert::From<nom::Err<Span<'a>>> for Error {
+    fn from(e: nom::Err<Span<'a>>) -> Self {
+        match e {
+            nom::Err::Incomplete(needed) => {
+                Error::Parser(format!("incomplete input: {:?}", needed))
+            }
+            nom::Err::Error(Context::Code(span, _)) => Error::Parser(format!("{}", span.fragment)),
+            nom::Err::Failure(Context::Code(span, _)) => {
+                Error::Parser(format!("{}", span.fragment))
+            }
+        }
     }
 }
 
