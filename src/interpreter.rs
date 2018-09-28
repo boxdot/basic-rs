@@ -460,9 +460,20 @@ impl<'a> Interpreter<'a> {
             Function::Int(expr) => self
                 .evaluate_numeric_expression(expr, stderr)
                 .map(|value| value.trunc()),
-            Function::Log(expr) => self
-                .evaluate_numeric_expression(expr, stderr)
-                .map(|value| value.ln()),
+            Function::Log(expr) => {
+                self.evaluate_numeric_expression(expr, stderr)
+                    .and_then(|value| {
+                        if value <= 0.0 {
+                            Err(Error::FunctionDomainError {
+                                src_line_number: self.state.current_line_number,
+                                function: "LOG".into(),
+                                arg: value,
+                            })
+                        } else {
+                            Ok(value.ln())
+                        }
+                    })
+            }
             Function::Sgn(expr) => self.evaluate_numeric_expression(expr, stderr).map(|value| {
                 if value == 0.0 {
                     0.0
