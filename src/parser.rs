@@ -101,7 +101,7 @@ named!(pub program<Span, Result<Program, Error>>,
         (Program::new(blocks))
     ));
 
-named!(block<Span, Block>,
+named!(pub block<Span, Block>,
     do_parse!(
         line_number: line_number >>
         statement: sep!(space, statement) >>
