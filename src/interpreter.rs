@@ -269,18 +269,18 @@ where
     Ok(res)
 }
 
-pub fn evaluate(program: &Program) -> Result<(String, String), Error> {
+pub fn evaluate(program: &Program, input: &str) -> Result<(String, String), Error> {
     let mut state = State::default();
     let mut output = Vec::new();
     let mut err_output = Vec::new();
 
     let mut block = program.first_block();
     loop {
-        let (action, src_line_number) = match block {
+        let (action, src_line_number, statement_source) = match block {
             Block::Line {
                 line_number,
                 statement,
-                ..
+                statement_source,
             } => (
                 evaluate_statement(
                     *line_number,
@@ -290,7 +290,18 @@ pub fn evaluate(program: &Program) -> Result<(String, String), Error> {
                     &mut err_output,
                 )?,
                 *line_number,
+                statement_source,
             ),
+        };
+
+        // Gets the source code text of a statement from input source code
+        // based on the span pointing to it.
+        let get_statement_source_code = || -> String {
+            input[statement_source.offset..]
+                .lines()
+                .next()
+                .unwrap()
+                .into()
         };
 
         match action {
@@ -301,6 +312,7 @@ pub fn evaluate(program: &Program) -> Result<(String, String), Error> {
                     .ok_or_else(|| Error::UndefinedLineNumber {
                         src_line_number,
                         line_number,
+                        statement_source: get_statement_source_code(),
                     })?;
             }
             Action::Gosub(line_number) => {
@@ -309,6 +321,7 @@ pub fn evaluate(program: &Program) -> Result<(String, String), Error> {
                     .ok_or_else(|| Error::UndefinedLineNumber {
                         src_line_number,
                         line_number,
+                        statement_source: get_statement_source_code(),
                     })?;
                 state.stack.push(src_line_number);
             }
@@ -322,6 +335,7 @@ pub fn evaluate(program: &Program) -> Result<(String, String), Error> {
                     .ok_or_else(|| Error::UndefinedLineNumber {
                         src_line_number,
                         line_number: prev_line_number,
+                        statement_source: get_statement_source_code(),
                     })?;
                 block = program.next_block(prev_block);
             }

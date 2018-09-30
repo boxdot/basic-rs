@@ -23,7 +23,7 @@ pub fn execute(input: &str) -> Result<(String, String), Error> {
                 remaining.fragment
             )))
         } else {
-            interpreter::evaluate(&ast?)
+            interpreter::evaluate(&ast?, input)
         },
         Err(nom::Err::Failure(nom::simple_errors::Context::Code(
             position,
