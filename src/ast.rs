@@ -1,16 +1,17 @@
 use error::Error;
+use parser::Span;
 
 use std::collections::HashMap;
 use std::fmt::{self, Write};
 use std::ops;
 
 #[derive(Debug)]
-pub struct Program {
-    pub blocks: Vec<Block>,
+pub struct Program<'a> {
+    pub blocks: Vec<Block<'a>>,
     block_index: HashMap<u16, usize>,
 }
 
-impl Program {
+impl<'a> Program<'a> {
     pub fn new(blocks: Vec<Block>) -> Result<Program, Error> {
         let end_statement_pos = blocks.iter().position(|b| match b {
             Block::Line {
@@ -22,11 +23,13 @@ impl Program {
 
         if let Some(end_statement_pos) = end_statement_pos {
             if end_statement_pos + 1 != blocks.len() {
-                let line_numbers = blocks.into_iter().skip(end_statement_pos + 1).map(
-                    |b| match b {
-                        Block::Line { line_number, .. } => line_number,
-                    },
-                );
+                let line_numbers =
+                    blocks
+                        .into_iter()
+                        .skip(end_statement_pos + 1)
+                        .map(|b| match b {
+                            Block::Line { line_number, .. } => line_number,
+                        });
                 Err(Error::StatementsAfterEnd {
                     line_numbers: line_numbers.collect(),
                 })
@@ -43,8 +46,7 @@ impl Program {
                     .last()
                     .map(|b| match b {
                         Block::Line { line_number, .. } => *line_number,
-                    })
-                    .unwrap_or(0u16),
+                    }).unwrap_or(0u16),
             })
         }
     }
@@ -53,7 +55,7 @@ impl Program {
         self.blocks.first().expect("logic error")
     }
 
-    pub fn next_block<'a, 'b>(&'a self, block: &'b Block) -> &'a Block {
+    pub fn next_block<'b>(&'a self, block: &'b Block) -> &'a Block {
         let line_number = match block {
             Block::Line { line_number, .. } => line_number,
         };
@@ -85,9 +87,10 @@ impl Program {
 }
 
 #[derive(Debug)]
-pub enum Block {
+pub enum Block<'a> {
     Line {
         line_number: u16,
+        statement_source: Span<'a>,
         statement: Statement,
     },
 }

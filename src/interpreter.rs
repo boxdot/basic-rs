@@ -138,8 +138,7 @@ where
             PrintItem::Semicolon => true,
             PrintItem::Comma => true,
             _ => false,
-        })
-        .unwrap_or(false);
+        }).unwrap_or(false);
     if !last_item_is_comma_or_semicolon {
         state.columnar_position = 0;
         write!(output, "\n");
@@ -281,6 +280,7 @@ pub fn evaluate(program: &Program) -> Result<(String, String), Error> {
             Block::Line {
                 line_number,
                 statement,
+                ..
             } => (
                 evaluate_statement(
                     *line_number,
