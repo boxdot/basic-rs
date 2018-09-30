@@ -1,5 +1,3 @@
-use ast::{NumericVariable, StringVariable};
-
 use nom;
 use nom::types::CompleteStr;
 
@@ -26,6 +24,11 @@ pub enum Error {
     },
     UnexpectedReturn {
         src_line_number: u16,
+    },
+    FracPowOfNegValue {
+        src_line_number: u16,
+        value: f64,
+        exp: f64,
     },
 }
 
@@ -76,6 +79,15 @@ impl fmt::Display for Error {
             Error::UnexpectedReturn { src_line_number } => {
                 write!(f, "{}: error: unexpected return\n", src_line_number)
             }
+            Error::FracPowOfNegValue {
+                src_line_number,
+                value,
+                exp,
+            } => write!(
+                f,
+                "{}: error: negative value raised to non-integral value ({} ^ {})\n",
+                src_line_number, value, exp
+            ),
         }
     }
 }

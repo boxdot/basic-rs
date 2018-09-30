@@ -8,7 +8,15 @@ pub fn format_float(value: f64) -> String {
     // const EXTRAD_WIDTH: usize = 2;
 
     if value == 0.0 {
-        return String::from(" 0 ");
+        return " 0 ".into();
+    } else if value.is_nan() {
+        return " NAN ".into();
+    } else if value.is_infinite() {
+        if value.is_sign_positive() {
+            return " INF ".into();
+        } else {
+            return "-INF ".into();
+        }
     }
 
     let sign_str = if value.is_sign_positive() { ' ' } else { '-' };
@@ -62,8 +70,7 @@ pub fn format_float(value: f64) -> String {
                         .chars()
                         .skip(integ.len().saturating_sub(n_shift))
                         .chain(fract.chars()),
-                )
-                .collect();
+                ).collect();
             let integ = &integ[..integ.len().saturating_sub(n_shift)];
             let full_stop = if !fract.is_empty() { "." } else { "" };
             format!("{}{}{}{} ", sign_str, integ, full_stop, fract)

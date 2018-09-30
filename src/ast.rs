@@ -118,7 +118,11 @@ pub enum Statement {
 
 #[derive(Debug)]
 pub enum Constant {
-    Numeric(f64),
+    Numeric {
+        sign: Sign,
+        significand: f64,
+        exrad: i32,
+    },
     String(StringConstant),
 }
 
@@ -212,7 +216,10 @@ impl NumericExpression {
     pub fn with_constant(value: f64) -> Self {
         NumericExpression::new(
             Some(if value >= 0.0 { Sign::Pos } else { Sign::Neg }),
-            Term::new(Factor::new(Primary::Constant(value.abs()), vec![]), vec![]),
+            Term::new(
+                Factor::new(Primary::Constant(value.abs(), 0), vec![]),
+                vec![],
+            ),
             vec![],
         )
     }
@@ -252,7 +259,7 @@ pub enum Multiplier {
 #[derive(Debug, PartialEq)]
 pub enum Primary {
     Variable(NumericVariable),
-    Constant(f64),
+    Constant(f64, i32),
     Expression(NumericExpression),
 }
 

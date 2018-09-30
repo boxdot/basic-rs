@@ -2,7 +2,7 @@ use ast::*;
 use error::Error;
 
 use nom::types::CompleteStr;
-use nom::{eol, space, space0};
+use nom::{eol, space, space0, IResult};
 use nom_locate::LocatedSpan;
 
 use std::fmt;
@@ -126,12 +126,12 @@ named!(statement<Span, (Statement, Span)>,
 
 // 6. Constants
 
-named!(numeric_constant<Span, f64>,
+named!(numeric_constant<Span, (Sign, f64, i32)>,
     do_parse!(
         sign: opt!(sign) >>
         space0 >>
         numeric_rep: numeric_rep >>
-        (sign.unwrap_or(Sign::Pos) * numeric_rep)
+        (sign.unwrap_or(Sign::Pos), numeric_rep.0, numeric_rep.1)
     ));
 
 named!(sign<Span, Sign>,
@@ -140,9 +140,9 @@ named!(sign<Span, Sign>,
         char!('-') => { |_| Sign::Neg }
     ));
 
-named!(numeric_rep<Span, f64>,
+named!(numeric_rep<Span, (f64, i32)>,
     map!(pair!(significand, opt!(exrad)),
-        |(significand, exrad)| significand * 10.0_f64.powi(exrad.unwrap_or(0))));
+        |(significand, exrad)| (significand, exrad.unwrap_or(0))));
 
 named!(significand<Span, f64>,
     alt!(
@@ -247,7 +247,7 @@ named!(multiplier<Span, Multiplier>,
 named!(primary<Span, Primary>,
     alt!(
         map!(numeric_variable, Primary::Variable) |
-        map!(numeric_rep, Primary::Constant) |
+        map!(numeric_rep, |(significand, exrad)| Primary::Constant(significand, exrad)) |
         map!(delimited!(char!('('), numeric_expression, char!(')')), Primary::Expression)
     ));
 
@@ -286,6 +286,23 @@ named!(numeric_let_statement<Span, LetStatement>,
         expression: numeric_expression >>
         (LetStatement::Numeric{ variable, expression })
     ));
+
+/// Finds position of constant in let statement when generating a warning.
+pub fn let_statement_numeric_constant_pos<'a>(statement: &'a str) -> IResult<Span<'a>, Span<'a>> {
+    named!(parse<Span, Span>,
+        do_parse!(
+            tag!("LET") >> space >>
+            numeric_variable >>
+            space0 >>
+            tag!("=") >>
+            space0 >>
+            opt!(sign) >> // we need position after sign if there is any
+            position: position!() >>
+            numeric_expression >>
+            (position)
+        ));
+    parse(Span::new(CompleteStr(statement)))
+}
 
 named!(string_let_statement<Span, LetStatement>,
     do_parse!(
@@ -438,7 +455,7 @@ mod tests {
             ast,
             PrintItem::TabCall(NumericExpression::new(
                 None,
-                Term::new(Factor::new(Primary::Constant(24.0), vec![]), vec![]),
+                Term::new(Factor::new(Primary::Constant(24.0, 0), vec![]), vec![]),
                 vec![]
             ))
         );
@@ -455,7 +472,7 @@ mod tests {
             Statement::Print(PrintStatement {
                 list: vec![PrintItem::TabCall(NumericExpression::new(
                     None,
-                    Term::new(Factor::new(Primary::Constant(24.0), vec![]), vec![]),
+                    Term::new(Factor::new(Primary::Constant(24.0, 0), vec![]), vec![]),
                     vec![],
                 ))],
             })
@@ -498,6 +515,6 @@ mod tests {
         let (remaining, float) = res.expect("failed to parse");
         let remaining = remaining.fragment;
         assert!(remaining.is_empty(), "Remaing is not empty: {}", remaining);
-        assert_eq!(float, -123456E-29);
+        assert_eq!(float, (Sign::Neg, 123456f64, -29));
     }
 }
