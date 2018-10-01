@@ -37,6 +37,7 @@ enum Action {
     Return,
     Stop,
     Goto(u16),
+    GotoAndNextLine(u16),
     Gosub(u16),
 }
 
@@ -82,6 +83,17 @@ impl<'a> Interpreter<'a> {
                             line_number,
                             statement_source: self.get_source_line(source_offset).into(),
                         })?;
+                }
+                Action::GotoAndNextLine(line_number) => {
+                    let goto_block = self
+                        .program
+                        .get_block_by_line_number(line_number)
+                        .ok_or_else(|| Error::UndefinedLineNumber {
+                            src_line_number,
+                            line_number,
+                            statement_source: self.get_source_line(source_offset).into(),
+                        })?;
+                    block = self.program.next_block(goto_block);
                 }
                 Action::Gosub(line_number) => {
                     block = self
@@ -143,35 +155,15 @@ impl<'a> Interpreter<'a> {
             }
             Statement::OnGoto(statement) => Action::Goto(self.evaluate_on_goto(statement, stderr)?),
             Statement::For(for_statement) => {
-                let initial_value =
-                    self.evaluate_numeric_expression(&for_statement.initial_value, stderr)?;
-                self.state
-                    .numeric_values
-                    .insert(for_statement.control_variable, initial_value);
-                self.state.stack.push(self.state.current_line_number);
+                self.evaluate_for(for_statement, stderr)?;
                 Action::NextLine
             }
             Statement::Next(control_variable) => {
-                let for_statement_line_number = self.state.stack.last().expect("NEXT before FOR");
-                let block = self
-                    .program
-                    .get_block_by_line_number(*for_statement_line_number)
-                    .expect("FOR not in stack");
-                match block {
-                    Block::Line {
-                        statement: Statement::For(for_statement),
-                        ..
-                    } => {
-                        let mut control_value = self
-                            .state
-                            .numeric_values
-                            .get_mut(control_variable)
-                            .expect("FOR without control variable");
-                        let inc =
-                            self.evaluate_numeric_expression(&for_statement.increment, stderr)?;
-                        *control_value += inc;
-                    }
-                    _ => panic!("shit"),
+                let next_line_number = self.evaluate_next(&control_variable)?;
+                if let Some(for_block_line_number) = next_line_number {
+                    Action::GotoAndNextLine(for_block_line_number)
+                } else {
+                    Action::NextLine
                 }
             }
             Statement::Read(variables) => {
@@ -182,7 +174,7 @@ impl<'a> Interpreter<'a> {
                 self.state.data_pointer = 0;
                 Action::NextLine
             }
-            Statement::Data(datum) => Action::NextLine,
+            Statement::Data(_) => Action::NextLine,
             Statement::Rem => Action::NextLine,
             Statement::Return => Action::Return,
             Statement::Stop => Action::Stop,
@@ -485,17 +477,85 @@ impl<'a> Interpreter<'a> {
         statement: &OnGotoStatement,
         stderr: &mut W,
     ) -> Result<u16, Error> {
-        let result_index = self
+        let idx = self
             .evaluate_numeric_expression(&statement.numeric_expression, stderr)?
             .round() as usize;
-        if result_index < 1 || result_index >= statement.line_numbers.len() {
+        if idx < 1 || idx > statement.line_numbers.len() {
             return Err(Error::InvalidOnGotoValue {
                 src_line_number: self.state.current_line_number,
-                value: result_index,
+                value: idx,
             });
         }
 
-        Ok(statement.line_numbers[result_index - 1])
+        Ok(statement.line_numbers[idx - 1])
+    }
+
+    fn evaluate_for<W: Write>(
+        &mut self,
+        statement: &ForStatement,
+        stderr: &mut W,
+    ) -> Result<(), Error> {
+        let initial_value = self.evaluate_numeric_expression(&statement.initial_value, stderr)?;
+        let limit = self.evaluate_numeric_expression(&statement.limit, stderr)?;
+        let increment = self.evaluate_numeric_expression(&statement.increment, stderr)?;
+
+        self.state
+            .numeric_values
+            .insert(statement.control_variable, initial_value);
+
+        let line_number = self.state.current_line_number;
+        self.state
+            .numeric_values
+            .insert(NumericVariable::Limit { line_number }, limit);
+        self.state
+            .numeric_values
+            .insert(NumericVariable::Increment { line_number }, increment);
+
+        self.state.stack.push(self.state.current_line_number);
+        Ok(())
+    }
+
+    /// Returns either the address of the corresponding FOR-statement, or None, if the FOR
+    /// loop should end.
+    fn evaluate_next(&mut self, control_variable: &NumericVariable) -> Result<Option<u16>, Error> {
+        let src_line_number = self.state.current_line_number;
+        let invalid_next = || Error::NextWithoutFor { src_line_number };
+
+        // Check that we actually point to the right FOR block.
+        // An invalid situation could be created by the user, e.g. when overlapping
+        // FOR blocks with GOSUB statements.
+        let line_number = *self.state.stack.last().ok_or_else(invalid_next)?;
+        let block = self
+            .program
+            .get_block_by_line_number(line_number)
+            .ok_or_else(invalid_next)?;
+        match block {
+            Block::Line {
+                statement: Statement::For(for_statement),
+                ..
+            } => if &for_statement.control_variable != control_variable {
+                return Err(invalid_next());
+            },
+            _ => return Err(invalid_next()),
+        }
+
+        let limit = self.state.numeric_values[&NumericVariable::Limit { line_number }];
+        let increment = self.state.numeric_values[&NumericVariable::Increment { line_number }];
+
+        let control_value = self
+            .state
+            .numeric_values
+            .get_mut(&control_variable)
+            .expect("invalid control variable in NEXT block");
+        *control_value += increment;
+        if (*control_value - limit) * increment.signum() > 0.0 {
+            // End for loop
+            self.state.stack.pop();
+            Ok(None)
+        } else {
+            // Jump back to the beginning of the FOR block
+            Ok(Some(line_number))
+        }
     }
 
     // Helper functions

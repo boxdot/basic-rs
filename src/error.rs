@@ -41,6 +41,9 @@ pub enum Error {
         src_line_number: u16,
         value: usize,
     },
+    NextWithoutFor {
+        src_line_number: u16,
+    },
 }
 
 impl<'a> convert::From<nom::Err<CompleteStr<'a>>> for Error {
@@ -118,7 +121,14 @@ impl fmt::Display for Error {
                 "{}: error: evaluated index {} in ON GOTO statement is less than one or greater than the number of line numbers provided.",
                 src_line_number,
                 value
-            )
+            ),
+            Error::NextWithoutFor {
+                src_line_number,
+            } => write!(
+                f,
+                "{}: error: NEXT without FOR \n",
+                src_line_number,
+            ),
         }
     }
 }

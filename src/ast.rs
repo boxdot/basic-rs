@@ -199,6 +199,8 @@ pub struct StringConstant(pub String);
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum NumericVariable {
     Simple { letter: char, digit: Option<u8> },
+    Limit { line_number: u16 },
+    Increment { line_number: u16 },
 }
 
 impl fmt::Display for NumericVariable {
@@ -210,6 +212,10 @@ impl fmt::Display for NumericVariable {
                     write!(f, "{}", digit)?;
                 }
                 Ok(())
+            }
+            NumericVariable::Limit { line_number } => write!(f, "Limit {{ at: {} }}", line_number),
+            NumericVariable::Increment { line_number } => {
+                write!(f, "Increment {{ at: {} }}", line_number)
             }
         }
     }

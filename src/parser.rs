@@ -117,7 +117,7 @@ named!(statement<Span, (Statement, Span)>,
             if_then_statement |
             on_goto_statement |
             let_statement |
-            for_statement | 
+            for_statement |
             next_statement |
             print_statement |
             return_statement |
@@ -394,7 +394,7 @@ named!(return_statement<Span, Statement>,
         (Statement::Return)
     ));
 
-named!(on_goto_statement<Span, Statement>, 
+named!(on_goto_statement<Span, Statement>,
     do_parse!(
         tag!("ON") >>
         space0 >>
@@ -416,7 +416,6 @@ named!(stop_statement<Span, Statement>,
 
 // 13. FOR and NEXT statements
 
-
 named!(for_statement<Span, Statement>,
     do_parse!(
         tag!("FOR") >>
@@ -434,9 +433,9 @@ named!(for_statement<Span, Statement>,
         increment: opt!(step_increment) >>
         (Statement::For(
             ForStatement {
-                control_variable, 
-                initial_value, 
-                limit, 
+                control_variable,
+                initial_value,
+                limit,
                 increment: increment.unwrap_or(NumericExpression::with_constant(1.0))
             })
         )
@@ -523,7 +522,7 @@ named!(restore_statement<Span, Statement>,
 
 // 17. DATA statement
 
-named!(data_statement<Span, Statement>, 
+named!(data_statement<Span, Statement>,
     do_parse!(
         tag!("DATA") >>
         space0 >>
