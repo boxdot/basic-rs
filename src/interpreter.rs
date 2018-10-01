@@ -142,8 +142,38 @@ impl<'a> Interpreter<'a> {
                 }
             }
             Statement::OnGoto(statement) => Action::Goto(self.evaluate_on_goto(statement, stderr)?),
-            Statement::For(for_statement) => unimplemented!(),
-            Statement::Next(control_variable) => unimplemented!(),
+            Statement::For(for_statement) => {
+                let initial_value =
+                    self.evaluate_numeric_expression(&for_statement.initial_value, stderr)?;
+                self.state
+                    .numeric_values
+                    .insert(for_statement.control_variable, initial_value);
+                self.state.stack.push(self.state.current_line_number);
+                Action::NextLine
+            }
+            Statement::Next(control_variable) => {
+                let for_statement_line_number = self.state.stack.last().expect("NEXT before FOR");
+                let block = self
+                    .program
+                    .get_block_by_line_number(*for_statement_line_number)
+                    .expect("FOR not in stack");
+                match block {
+                    Block::Line {
+                        statement: Statement::For(for_statement),
+                        ..
+                    } => {
+                        let mut control_value = self
+                            .state
+                            .numeric_values
+                            .get_mut(control_variable)
+                            .expect("FOR without control variable");
+                        let inc =
+                            self.evaluate_numeric_expression(&for_statement.increment, stderr)?;
+                        *control_value += inc;
+                    }
+                    _ => panic!("shit"),
+                }
+            }
             Statement::Read(variables) => {
                 self.evaluate_read(variables, stderr)?;
                 Action::NextLine
