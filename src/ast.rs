@@ -129,7 +129,7 @@ pub struct ForStatement {
 
 #[derive(Debug, PartialEq)]
 pub struct OnGotoStatement {
-    pub numeric_variable: NumericVariable,
+    pub numeric_expression: NumericExpression,
     pub line_numbers: Vec<u16>,
 }
 

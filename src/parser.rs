@@ -398,14 +398,14 @@ named!(on_goto_statement<Span, Statement>,
     do_parse!(
         tag!("ON") >>
         space0 >>
-        numeric_variable: numeric_variable >> // looks like there's a typo in the ECMA spec
+        numeric_expression: numeric_expression >> // looks like there's a typo in the ECMA spec
         space0 >>
         tag!("GO") >>
         space0 >>
         tag!("TO") >>
         space0 >>
         line_numbers: separated_nonempty_list!(char!(','), line_number) >>
-        (Statement::OnGoto(OnGotoStatement { numeric_variable, line_numbers }))
+        (Statement::OnGoto(OnGotoStatement { numeric_expression, line_numbers }))
 ));
 
 named!(stop_statement<Span, Statement>,

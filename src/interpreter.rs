@@ -141,7 +141,7 @@ impl<'a> Interpreter<'a> {
                     Action::NextLine
                 }
             }
-            Statement::OnGoto(ongoto_statement) => unimplemented!(),
+            Statement::OnGoto(statement) => Action::Goto(self.evaluate_on_goto(statement, stderr)?),
             Statement::For(for_statement) => unimplemented!(),
             Statement::Next(control_variable) => unimplemented!(),
             Statement::Read(variables) => {
@@ -448,6 +448,24 @@ impl<'a> Interpreter<'a> {
             .get(variable)
             .cloned()
             .unwrap_or(0f64))
+    }
+
+    fn evaluate_on_goto<W: Write>(
+        &self,
+        statement: &OnGotoStatement,
+        stderr: &mut W,
+    ) -> Result<u16, Error> {
+        let result_index = self
+            .evaluate_numeric_expression(&statement.numeric_expression, stderr)?
+            .round() as usize;
+        if result_index < 1 || result_index >= statement.line_numbers.len() {
+            return Err(Error::InvalidOnGotoValue {
+                src_line_number: self.state.current_line_number,
+                value: result_index,
+            });
+        }
+
+        Ok(statement.line_numbers[result_index - 1])
     }
 
     // Helper functions

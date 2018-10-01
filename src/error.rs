@@ -37,6 +37,10 @@ pub enum Error {
         src_line_number: u16,
         data_pointer: u16,
     },
+    InvalidOnGotoValue {
+        src_line_number: u16,
+        value: usize,
+    },
 }
 
 impl<'a> convert::From<nom::Err<CompleteStr<'a>>> for Error {
@@ -106,6 +110,15 @@ impl fmt::Display for Error {
                 "{}: error: mismatch between read statement and DATA at position {}",
                 src_line_number, data_pointer
             ),
+            Error::InvalidOnGotoValue {
+                src_line_number,
+                value,
+            } => write!(
+                f,
+                "{}: error: evaluated index {} in ON GOTO statement is less than one or greater than the number of line numbers provided.",
+                src_line_number,
+                value
+            )
         }
     }
 }
