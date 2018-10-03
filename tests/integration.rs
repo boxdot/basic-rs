@@ -42,12 +42,16 @@ fn run_and_compare_output(program: &str, expected_output: &str, expected_err_out
         err_output += &format!("{}", e);
     }
 
-    assert_eq!(
-        output,
-        expected_output,
-        "\nDiff:\n{}\n",
-        diff(&output, expected_output)
-    );
+    if program.find("THIS TEST IS INFORMATIVE ONLY").is_some() {
+        assert!(output.find("INFORMATIVE TEST PASSED").is_some());
+    } else {
+        assert_eq!(
+            output,
+            expected_output,
+            "\nDiff:\n{}\n",
+            diff(&output, expected_output)
+        );
+    }
 
     assert_eq!(
         err_output,
@@ -106,11 +110,11 @@ test_program!(P035);
 test_program!(P036);
 test_program!(P037);
 test_program!(P038);
-try_test_program!(P039);
-try_test_program!(P040);
+test_program!(P039);
+test_program!(P040);
 test_program!(P041);
 test_program!(P042);
-try_test_program!(P043);
+test_program!(P043);
 try_test_program!(P044);
 try_test_program!(P045);
 try_test_program!(P046);
