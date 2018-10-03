@@ -7,6 +7,7 @@ authors = ["boxdot <d@zerovolt.org>", "jeschkies <k@jeschkies.xyz>"]
 nom = "4.0"
 nom_locate = "0.3"
 itertools = "0.7"
+rand = "0.5"
 
 [dev-dependencies]
 diff = "0.1"
