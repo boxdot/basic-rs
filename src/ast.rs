@@ -9,6 +9,7 @@ use std::ops;
 pub struct Program<'a> {
     pub blocks: Vec<Block<'a>>,
     block_index: HashMap<u16, usize>,
+    pub datum: Vec<Expression>,
 }
 
 impl<'a> Program<'a> {
@@ -34,11 +35,8 @@ impl<'a> Program<'a> {
                     line_numbers: line_numbers.collect(),
                 })
             } else {
-                let block_index = Self::build_block_index(&blocks)?;
-                Ok(Program {
-                    blocks,
-                    block_index,
-                })
+                let program = Self::build_program(blocks)?;
+                Ok(program)
             }
         } else {
             Err(Error::MissingEnd {
@@ -51,16 +49,8 @@ impl<'a> Program<'a> {
         }
     }
 
-    pub fn first_block(&self) -> &Block {
-        self.blocks.first().expect("logic error")
-    }
-
-    pub fn next_block<'b>(&'a self, block: &'b Block) -> &'a Block {
-        let line_number = match block {
-            Block::Line { line_number, .. } => line_number,
-        };
-        let index = self.block_index.get(line_number).expect("logic error");
-        &self.blocks[index + 1]
+    pub fn get_block_index_by_line_number(&self, line_number: u16) -> Option<usize> {
+        self.block_index.get(&line_number).cloned()
     }
 
     pub fn get_block_by_line_number(&self, line_number: u16) -> Option<&Block> {
@@ -69,20 +59,40 @@ impl<'a> Program<'a> {
             .map(|index| &self.blocks[*index])
     }
 
-    fn build_block_index(blocks: &[Block]) -> Result<HashMap<u16, usize>, Error> {
+    fn build_program(mut blocks: Vec<Block>) -> Result<Program, Error> {
+        let mut program_blocks = Vec::new();
         let mut block_index = HashMap::new();
-        for (index, block) in blocks.iter().enumerate() {
+        let mut datum = Vec::new();
+        let mut index = 0;
+        for block in blocks.drain(..) {
             match block {
-                Block::Line { line_number, .. } => {
-                    if block_index.insert(*line_number, index).is_some() {
-                        return Err(Error::DuplicateLineNumber {
-                            line_number: *line_number,
-                        });
+                Block::Line {
+                    line_number,
+                    statement,
+                    statement_source,
+                } => match statement {
+                    Statement::Data(mut statement_datum) => {
+                        datum.append(&mut statement_datum);
                     }
-                }
+                    _ => {
+                        if block_index.insert(line_number, index).is_some() {
+                            return Err(Error::DuplicateLineNumber { line_number });
+                        }
+                        index += 1;
+                        program_blocks.push(Block::Line {
+                            line_number,
+                            statement,
+                            statement_source,
+                        })
+                    }
+                },
             }
         }
-        Ok(block_index)
+        Ok(Program {
+            blocks: program_blocks,
+            block_index,
+            datum,
+        })
     }
 }
 
@@ -102,12 +112,32 @@ pub enum RelationalExpression {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct ForStatement {
+    pub control_variable: NumericVariable,
+    pub initial_value: NumericExpression,
+    pub limit: NumericExpression,
+    pub increment: NumericExpression,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct OnGotoStatement {
+    pub numeric_expression: NumericExpression,
+    pub line_numbers: Vec<u16>,
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Statement {
     Print(PrintStatement),
     Let(LetStatement),
     Goto(u16),
     Gosub(u16),
     IfThen(RelationalExpression, u16),
+    OnGoto(OnGotoStatement),
+    For(ForStatement),
+    Next(NumericVariable),
+    Read(Vec<Variable>),
+    Data(Vec<Expression>),
+    Restore,
     Rem,
     Return,
     Stop,
@@ -161,6 +191,8 @@ pub struct StringConstant(pub String);
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum NumericVariable {
     Simple { letter: char, digit: Option<u8> },
+    Limit { line_number: u16 },
+    Increment { line_number: u16 },
 }
 
 impl fmt::Display for NumericVariable {
@@ -172,6 +204,10 @@ impl fmt::Display for NumericVariable {
                     write!(f, "{}", digit)?;
                 }
                 Ok(())
+            }
+            NumericVariable::Limit { line_number } => write!(f, "Limit {{ at: {} }}", line_number),
+            NumericVariable::Increment { line_number } => {
+                write!(f, "Increment {{ at: {} }}", line_number)
             }
         }
     }
@@ -186,7 +222,7 @@ impl fmt::Display for StringVariable {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Variable {
     Numeric(NumericVariable),
     String(StringVariable),
@@ -212,7 +248,6 @@ impl NumericExpression {
         Self { terms: all_terms }
     }
 
-    #[cfg(test)]
     pub fn with_constant(value: f64) -> Self {
         NumericExpression::new(
             Some(if value >= 0.0 { Sign::Pos } else { Sign::Neg }),

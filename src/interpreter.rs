@@ -15,6 +15,7 @@ pub struct Interpreter<'a> {
 
 #[derive(Debug, Default)]
 struct State {
+    block_pointer: usize,
     /// BASIC line number label of the current statement
     current_line_number: u16,
     /// Offset in the source code of the current statement
@@ -27,6 +28,8 @@ struct State {
     string_values: HashMap<StringVariable, String>,
     /// stack of return line numbers for routines
     stack: Vec<u16>,
+    /// DATA statement pointer
+    data_pointer: u16,
 }
 
 #[derive(Debug)]
@@ -35,6 +38,7 @@ enum Action {
     Return,
     Stop,
     Goto(u16),
+    GotoAndNextLine(u16),
     Gosub(u16),
 }
 
@@ -52,8 +56,15 @@ impl<'a> Interpreter<'a> {
         stdout: &mut W,
         stderr: &mut V,
     ) -> Result<(), Error> {
-        let mut block = self.program.first_block();
         loop {
+            let block = self
+                .program
+                .blocks
+                .get(self.state.block_pointer)
+                .ok_or_else(|| Error::MissingEnd {
+                    src_line_number: self.state.current_line_number,
+                })?;
+
             let action = match block {
                 Block::Line {
                     line_number,
@@ -70,21 +81,32 @@ impl<'a> Interpreter<'a> {
             let source_offset = self.state.current_source_offset;
 
             match action {
-                Action::NextLine => block = self.program.next_block(block),
+                Action::NextLine => self.state.block_pointer += 1,
                 Action::Goto(line_number) => {
-                    block = self
+                    self.state.block_pointer = self
                         .program
-                        .get_block_by_line_number(line_number)
+                        .get_block_index_by_line_number(line_number)
                         .ok_or_else(|| Error::UndefinedLineNumber {
                             src_line_number,
                             line_number,
                             statement_source: self.get_source_line(source_offset).into(),
                         })?;
                 }
-                Action::Gosub(line_number) => {
-                    block = self
+                Action::GotoAndNextLine(line_number) => {
+                    self.state.block_pointer = self
                         .program
-                        .get_block_by_line_number(line_number)
+                        .get_block_index_by_line_number(line_number)
+                        .ok_or_else(|| Error::UndefinedLineNumber {
+                            src_line_number,
+                            line_number,
+                            statement_source: self.get_source_line(source_offset).into(),
+                        })?
+                        + 1;
+                }
+                Action::Gosub(line_number) => {
+                    self.state.block_pointer = self
+                        .program
+                        .get_block_index_by_line_number(line_number)
                         .ok_or_else(|| Error::UndefinedLineNumber {
                             src_line_number,
                             line_number,
@@ -98,15 +120,15 @@ impl<'a> Interpreter<'a> {
                         .stack
                         .pop()
                         .ok_or_else(|| Error::UnexpectedReturn { src_line_number })?;
-                    let prev_block = self
+                    self.state.block_pointer = self
                         .program
-                        .get_block_by_line_number(prev_line_number)
+                        .get_block_index_by_line_number(prev_line_number)
                         .ok_or_else(|| Error::UndefinedLineNumber {
                             src_line_number,
                             line_number: prev_line_number,
                             statement_source: self.get_source_line(source_offset).into(),
-                        })?;
-                    block = self.program.next_block(prev_block);
+                        })?
+                        + 1;
                 }
                 Action::Stop => break,
             }
@@ -139,6 +161,28 @@ impl<'a> Interpreter<'a> {
                     Action::NextLine
                 }
             }
+            Statement::OnGoto(statement) => Action::Goto(self.evaluate_on_goto(statement, stderr)?),
+            Statement::For(for_statement) => {
+                self.evaluate_for(for_statement, stderr)?;
+                Action::NextLine
+            }
+            Statement::Next(control_variable) => {
+                let next_line_number = self.evaluate_next(&control_variable)?;
+                if let Some(for_block_line_number) = next_line_number {
+                    Action::GotoAndNextLine(for_block_line_number)
+                } else {
+                    Action::NextLine
+                }
+            }
+            Statement::Read(variables) => {
+                self.evaluate_read(variables, stderr)?;
+                Action::NextLine
+            }
+            Statement::Restore => {
+                self.state.data_pointer = 0;
+                Action::NextLine
+            }
+            Statement::Data(_) => Action::NextLine,
             Statement::Rem => Action::NextLine,
             Statement::Return => Action::Return,
             Statement::Stop => Action::Stop,
@@ -321,6 +365,40 @@ impl<'a> Interpreter<'a> {
             .fold_results(0.0, |acc, (sign, term)| acc + *sign * term)
     }
 
+    fn evaluate_read<W: Write>(
+        &mut self,
+        variables: &Vec<Variable>,
+        stderr: &mut W,
+    ) -> Result<(), Error> {
+        for variable in variables {
+            let data = self
+                .program
+                .datum
+                .get(self.state.data_pointer as usize)
+                .ok_or_else(|| Error::MissingData {
+                    src_line_number: self.state.current_line_number,
+                })?;
+            match (variable, data) {
+                (Variable::Numeric(numeric_variable), Expression::Numeric(numeric_expression)) => {
+                    let value = self.evaluate_numeric_expression(&numeric_expression, stderr)?;
+                    self.state.numeric_values.insert(*numeric_variable, value);
+                }
+                (Variable::String(string_variable), Expression::String(string_expression)) => {
+                    let value = String::from(self.evaluate_string_expression(&string_expression)?);
+                    self.state.string_values.insert(*string_variable, value);
+                }
+                (_, _) => {
+                    return Err(Error::ReadDatatypeMismatch {
+                        src_line_number: self.state.current_line_number,
+                        data_pointer: self.state.data_pointer,
+                    })
+                }
+            }
+            self.state.data_pointer += 1;
+        }
+        Ok(())
+    }
+
     fn evaluate_term<W: Write>(&self, term: &Term, stderr: &mut W) -> Result<f64, Error> {
         let mut acc = self.evaluate_factor(&term.factor, stderr)?;
         for (multiplier, factor) in &term.factors {
@@ -400,6 +478,92 @@ impl<'a> Interpreter<'a> {
             .get(variable)
             .cloned()
             .unwrap_or(0f64))
+    }
+
+    fn evaluate_on_goto<W: Write>(
+        &self,
+        statement: &OnGotoStatement,
+        stderr: &mut W,
+    ) -> Result<u16, Error> {
+        let idx = self
+            .evaluate_numeric_expression(&statement.numeric_expression, stderr)?
+            .round() as usize;
+        if idx < 1 || idx > statement.line_numbers.len() {
+            return Err(Error::InvalidOnGotoValue {
+                src_line_number: self.state.current_line_number,
+                value: idx,
+            });
+        }
+
+        Ok(statement.line_numbers[idx - 1])
+    }
+
+    fn evaluate_for<W: Write>(
+        &mut self,
+        statement: &ForStatement,
+        stderr: &mut W,
+    ) -> Result<(), Error> {
+        let initial_value = self.evaluate_numeric_expression(&statement.initial_value, stderr)?;
+        let limit = self.evaluate_numeric_expression(&statement.limit, stderr)?;
+        let increment = self.evaluate_numeric_expression(&statement.increment, stderr)?;
+
+        self.state
+            .numeric_values
+            .insert(statement.control_variable, initial_value);
+
+        let line_number = self.state.current_line_number;
+        self.state
+            .numeric_values
+            .insert(NumericVariable::Limit { line_number }, limit);
+        self.state
+            .numeric_values
+            .insert(NumericVariable::Increment { line_number }, increment);
+
+        self.state.stack.push(self.state.current_line_number);
+        Ok(())
+    }
+
+    /// Returns either the address of the corresponding FOR-statement, or None, if the FOR
+    /// loop should end.
+    fn evaluate_next(&mut self, control_variable: &NumericVariable) -> Result<Option<u16>, Error> {
+        let src_line_number = self.state.current_line_number;
+        let invalid_next = || Error::NextWithoutFor { src_line_number };
+
+        // Check that we actually point to the right FOR block.
+        // An invalid situation could be created by the user, e.g. when overlapping
+        // FOR blocks with GOSUB statements.
+        let line_number = *self.state.stack.last().ok_or_else(invalid_next)?;
+        let block = self
+            .program
+            .get_block_by_line_number(line_number)
+            .ok_or_else(invalid_next)?;
+        match block {
+            Block::Line {
+                statement: Statement::For(for_statement),
+                ..
+            } => if &for_statement.control_variable != control_variable {
+                return Err(invalid_next());
+            },
+            _ => return Err(invalid_next()),
+        }
+
+        let limit = self.state.numeric_values[&NumericVariable::Limit { line_number }];
+        let increment = self.state.numeric_values[&NumericVariable::Increment { line_number }];
+
+        let control_value = self
+            .state
+            .numeric_values
+            .get_mut(&control_variable)
+            .expect("invalid control variable in NEXT block");
+        *control_value += increment;
+        if (*control_value - limit) * increment.signum() > 0.0 {
+            // End for loop
+            self.state.stack.pop();
+            Ok(None)
+        } else {
+            // Jump back to the beginning of the FOR block
+            Ok(Some(line_number))
+        }
     }
 
     // Helper functions

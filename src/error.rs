@@ -4,6 +4,8 @@ use nom::types::CompleteStr;
 use std::convert;
 use std::fmt;
 
+// FIXME: src_line_number here has a wrong name. It stands for BASIC line number label,
+// however we use src_line_number in interpretor for the real line number in the source code.
 #[derive(Debug)]
 pub enum Error {
     Parser(String),
@@ -29,6 +31,20 @@ pub enum Error {
         src_line_number: u16,
         value: f64,
         exp: f64,
+    },
+    MissingData {
+        src_line_number: u16,
+    },
+    ReadDatatypeMismatch {
+        src_line_number: u16,
+        data_pointer: u16,
+    },
+    InvalidOnGotoValue {
+        src_line_number: u16,
+        value: usize,
+    },
+    NextWithoutFor {
+        src_line_number: u16,
     },
 }
 
@@ -87,6 +103,33 @@ impl fmt::Display for Error {
                 f,
                 "{}: error: negative value raised to non-integral value ({} ^ {})\n",
                 src_line_number, value, exp
+            ),
+            Error::MissingData { src_line_number } => {
+                write!(f, "{}: error: missing data\n", src_line_number)
+            }
+            Error::ReadDatatypeMismatch {
+                src_line_number,
+                data_pointer,
+            } => write!(
+                f,
+                "{}: error: mismatch between read statement and DATA at position {}",
+                src_line_number, data_pointer
+            ),
+            Error::InvalidOnGotoValue {
+                src_line_number,
+                value,
+            } => write!(
+                f,
+                "{}: error: evaluated index {} in ON GOTO statement is less than one or greater than the number of line numbers provided.",
+                src_line_number,
+                value
+            ),
+            Error::NextWithoutFor {
+                src_line_number,
+            } => write!(
+                f,
+                "{}: error: NEXT without FOR \n",
+                src_line_number,
             ),
         }
     }
