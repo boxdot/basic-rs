@@ -2,14 +2,15 @@ extern crate basic;
 
 use std::env;
 use std::fs::read_to_string;
+use std::io;
 
-fn main() -> Result<(), basic::Error> {
+fn main() {
     let filename = env::args()
         .nth(1)
         .expect("missing obligatory argument 'FILENAME'");
     let input = read_to_string(filename).expect("failed to read test program");
-    let (output, err_output) = basic::execute(&input)?;
-    println!("{}", output);
-    eprintln!("{}", err_output);
-    Ok(())
+    let res = basic::execute(&input, &mut io::stdout(), &mut io::stderr());
+    if let Err(e) = res {
+        eprintln!("{}", e);
+    }
 }

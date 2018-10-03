@@ -13,7 +13,7 @@ pub struct Program<'a> {
 }
 
 impl<'a> Program<'a> {
-    pub fn new(blocks: Vec<Block>) -> Result<Program, Error> {
+    pub fn new<'b>(blocks: Vec<Block<'a>>, source_code: &'b str) -> Result<Program<'a>, Error> {
         let end_statement_pos = blocks.iter().position(|b| match b {
             Block::Line {
                 statement: Statement::End,
@@ -35,7 +35,9 @@ impl<'a> Program<'a> {
                     line_numbers: line_numbers.collect(),
                 })
             } else {
-                Self::build_program(blocks)
+                let program = Self::build_program(blocks)?;
+                program.validate(source_code)?;
+                Ok(program)
             }
         } else {
             Err(Error::MissingEnd {
@@ -99,6 +101,47 @@ impl<'a> Program<'a> {
             block_index,
             data,
         })
+    }
+
+    fn validate(&self, source_code: &str) -> Result<(), Error> {
+        let check_valid_line_number = |ref_line_number, line_number, statement_source: &Span| {
+            if self.block_index.get(&ref_line_number).is_none() {
+                Err(Error::UndefinedLineNumber {
+                    src_line_number: line_number,
+                    line_number: ref_line_number,
+                    statement_source: source_code[statement_source.offset..]
+                        .lines()
+                        .next()
+                        .unwrap()
+                        .into(),
+                })
+            } else {
+                Ok(())
+            }
+        };
+
+        // check for invalid line label
+        for block in &self.blocks {
+            match block {
+                Block::Line {
+                    line_number,
+                    statement,
+                    statement_source,
+                } => match statement {
+                    Statement::Goto(ref_line_number) => {
+                        check_valid_line_number(*ref_line_number, *line_number, statement_source)?;
+                    }
+                    Statement::IfThen(_, ref_line_number) => {
+                        check_valid_line_number(*ref_line_number, *line_number, statement_source)?;
+                    }
+                    Statement::Gosub(ref_line_number) => {
+                        check_valid_line_number(*ref_line_number, *line_number, statement_source)?;
+                    }
+                    _ => (),
+                },
+            }
+        }
+        Ok(())
     }
 }
 

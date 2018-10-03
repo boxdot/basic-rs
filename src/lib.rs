@@ -16,33 +16,33 @@ use nom::types::CompleteStr;
 
 pub use error::Error;
 
-pub fn execute(input: &str) -> Result<(String, String), Error> {
+use std::io::Write;
+
+pub fn execute<W: Write, V: Write>(
+    input: &str,
+    stdout: &mut W,
+    stderr: &mut V,
+) -> Result<(), Error> {
     let res = parser::program(parser::Span::new(CompleteStr(input)));
     match res {
         Ok((remaining, ast)) => {
             if !remaining.fragment.is_empty() {
-                Ok((
-                    String::new(),
-                    syntax_error_with_cursor(&remaining.fragment)?,
-                ))
+                write!(stderr, "{}", syntax_error_with_cursor(&remaining.fragment)?);
+                Ok(())
             } else {
-                let mut stdout = Vec::new();
-                let mut stderr = Vec::new();
                 let ast = ast?;
                 let interpreter = Interpreter::new(&ast, input);
-                interpreter.evaluate(&mut stdout, &mut stderr)?;
-                Ok((
-                    String::from_utf8(stdout).unwrap(),
-                    String::from_utf8(stderr).unwrap(),
-                ))
+                interpreter.evaluate(stdout, stderr)?;
+                Ok(())
             }
         }
         Err(nom::Err::Failure(Context::Code(span, nom::ErrorKind::Custom(err_code)))) => {
             let line = input.lines().nth(span.line as usize - 1).unwrap();
-            let stderr = parser::ErrorCode::from(err_code)
+            let err_output = parser::ErrorCode::from(err_code)
                 .to_string(line, &span.fragment.lines().next().unwrap())
                 .unwrap_or_else(|| format!("{}", err_code));
-            Ok((String::new(), stderr))
+            write!(stderr, "{}", err_output);
+            Ok(())
         }
         Err(e) => Err(Error::Parser(format!("parser error: {}", e))),
     }
