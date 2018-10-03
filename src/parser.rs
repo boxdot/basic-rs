@@ -285,25 +285,19 @@ named!(primary<Span, Primary>,
     ));
 
 named!(numeric_function_ref<Span, Function>,
-    map!(pair!(numeric_supplied_function, argument_list), |(name, args)| {
-        match name.fragment.as_ref() {
-            "ABS" => Function::Abs(args),
-            "ATN" => Function::Atn(args),
-            "COS" => Function::Cos(args),
-            "EXP" => Function::Exp(args),
-            "INT" => Function::Int(args),
-            "LOG" => Function::Log(args),
-            "SGN" => Function::Sgn(args),
-            "SIN" => Function::Sin(args),
-            "SQR" => Function::Sqr(args),
-            "TAN" => Function::Tan(args),
-            _ => panic!("bug in parser"),
-        }
-    }));
-
-// for the future
-// named!(numeric_function_name<Span, NumericFunctionName>,
-//     alt!(numeric_defined_function | numeric_supplied_function));
+    alt!(
+        pair!(tag!("ABS"), argument_list) => { |(_, arg)| Function::Abs(arg) } |
+        pair!(tag!("ATN"), argument_list) => { |(_, arg)| Function::Atn(arg) } |
+        pair!(tag!("COS"), argument_list) => { |(_, arg)| Function::Cos(arg) } |
+        pair!(tag!("EXP"), argument_list) => { |(_, arg)| Function::Exp(arg) } |
+        pair!(tag!("INT"), argument_list) => { |(_, arg)| Function::Int(arg) } |
+        pair!(tag!("LOG"), argument_list) => { |(_, arg)| Function::Log(arg) } |
+        tag!("RND") => { |_| Function::Rnd } |
+        pair!(tag!("SGN"), argument_list) => { |(_, arg)| Function::Sgn(arg) } |
+        pair!(tag!("SIN"), argument_list) => { |(_, arg)| Function::Sin(arg) } |
+        pair!(tag!("SQR"), argument_list) => { |(_, arg)| Function::Sqr(arg) } |
+        pair!(tag!("TAN"), argument_list) => { |(_, arg)| Function::Tan(arg) }
+    ));
 
 named!(argument_list<Span, NumericExpression>,
     delimited!(char!('('), numeric_expression, char!(')')));
@@ -333,22 +327,6 @@ named!(equality_relation<Span, EqualityRelation>,
         tag!("<>") => { |_| EqualityRelation::NotEqualTo }
     )
 );
-
-// 9. Numeric supplied functions
-
-named!(numeric_supplied_function<Span, Span>,
-    alt!(
-        tag!("ABS") |
-        tag!("ATN") |
-        tag!("COS") |
-        tag!("EXP") |
-        tag!("INT") |
-        tag!("LOG") |
-        tag!("SGN") |
-        tag!("SIN") |
-        tag!("SQR") |
-        tag!("TAN")
-    ));
 
 // 11. LET statement
 

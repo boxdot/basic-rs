@@ -220,7 +220,7 @@ try_test_program!(P145);
 try_test_program!(P146);
 try_test_program!(P147);
 try_test_program!(P148);
-try_test_program!(P149);
+test_program!(P149);
 try_test_program!(P150);
 try_test_program!(P151);
 try_test_program!(P152);
