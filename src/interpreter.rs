@@ -4,6 +4,8 @@ use format::format_float;
 use parser;
 
 use itertools::Itertools;
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 
 use std::collections::HashMap;
 use std::io::Write;
@@ -14,7 +16,7 @@ pub struct Interpreter<'a> {
     state: State,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct State {
     /// BASIC line number label of the current statement
     current_line_number: u16,
@@ -30,6 +32,25 @@ struct State {
     stack: Vec<u16>,
     /// DATA statement pointer
     data_pointer: u16,
+    /// random number generator
+    rng: SmallRng,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            current_line_number: Default::default(),
+            current_source_offset: Default::default(),
+            columnar_position: Default::default(),
+            numeric_values: Default::default(),
+            string_values: Default::default(),
+            stack: Default::default(),
+            data_pointer: Default::default(),
+            rng: SmallRng::from_seed([
+                0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF,
+            ]),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -266,7 +287,7 @@ impl<'a> Interpreter<'a> {
     }
 
     fn evaluate_if<W: Write>(
-        &self,
+        &mut self,
         if_statement: &RelationalExpression,
         stderr: &mut W,
     ) -> Result<bool, Error> {
@@ -323,7 +344,7 @@ impl<'a> Interpreter<'a> {
     }
 
     fn evaluate_numeric_expression<W: Write>(
-        &self,
+        &mut self,
         expression: &NumericExpression,
         stderr: &mut W,
     ) -> Result<f64, Error> {
@@ -373,7 +394,7 @@ impl<'a> Interpreter<'a> {
         Ok(())
     }
 
-    fn evaluate_term<W: Write>(&self, term: &Term, stderr: &mut W) -> Result<f64, Error> {
+    fn evaluate_term<W: Write>(&mut self, term: &Term, stderr: &mut W) -> Result<f64, Error> {
         let mut acc = self.evaluate_factor(&term.factor, stderr)?;
         for (multiplier, factor) in &term.factors {
             let factor = self.evaluate_factor(factor, stderr)?;
@@ -396,7 +417,7 @@ impl<'a> Interpreter<'a> {
         Ok(acc)
     }
 
-    fn evaluate_factor<W: Write>(&self, factor: &Factor, stderr: &mut W) -> Result<f64, Error> {
+    fn evaluate_factor<W: Write>(&mut self, factor: &Factor, stderr: &mut W) -> Result<f64, Error> {
         let mut acc = self.evaluate_primary(&factor.primaries[0], stderr)?;
         for primary in &factor.primaries[1..] {
             let primary = self.evaluate_primary(primary, stderr)?;
@@ -423,7 +444,11 @@ impl<'a> Interpreter<'a> {
         Ok(acc)
     }
 
-    fn evaluate_primary<W: Write>(&self, primary: &Primary, stderr: &mut W) -> Result<f64, Error> {
+    fn evaluate_primary<W: Write>(
+        &mut self,
+        primary: &Primary,
+        stderr: &mut W,
+    ) -> Result<f64, Error> {
         let value = match primary {
             Primary::Variable(v) => self.evaluate_numeric_variable(v)?,
             Primary::Constant(c) => self.evaluate_numeric_constant(c, stderr)?,
@@ -433,7 +458,7 @@ impl<'a> Interpreter<'a> {
         Ok(value)
     }
 
-    fn evaluate_function<W: Write>(&self, f: &Function, stderr: &mut W) -> Result<f64, Error> {
+    fn evaluate_function<W: Write>(&mut self, f: &Function, stderr: &mut W) -> Result<f64, Error> {
         match f {
             Function::Abs(expr) => self
                 .evaluate_numeric_expression(expr, stderr)
@@ -460,6 +485,7 @@ impl<'a> Interpreter<'a> {
             Function::Int(expr) => self
                 .evaluate_numeric_expression(expr, stderr)
                 .map(|value| value.trunc()),
+            Function::Rnd => Ok(self.state.rng.gen()),
             Function::Log(expr) => {
                 self.evaluate_numeric_expression(expr, stderr)
                     .and_then(|value| {
@@ -501,7 +527,6 @@ impl<'a> Interpreter<'a> {
             Function::Tan(expr) => self
                 .evaluate_numeric_expression(expr, stderr)
                 .map(|value| value.tan()),
-            _ => unimplemented!(),
         }
     }
 

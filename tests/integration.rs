@@ -30,6 +30,20 @@ macro_rules! test_program {
     };
 }
 
+macro_rules! test_program_3x {
+    ($name:ident) => {
+        #[test]
+        #[allow(non_snake_case)]
+        fn $name() {
+            run_and_compare_output_3x(
+                include_str!(concat!("suite/", stringify!($name), ".BAS")),
+                include_str!(concat!("suite/", stringify!($name), ".ok")),
+                include_str!(concat!("suite/", stringify!($name), ".eok")),
+            );
+        }
+    };
+}
+
 fn run_and_compare_output(program: &str, expected_output: &str, expected_err_output: &str) {
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
@@ -59,6 +73,53 @@ fn run_and_compare_output(program: &str, expected_output: &str, expected_err_out
         "\nDiff:\n{}\n",
         diff(&err_output, &expected_err_output)
     );
+}
+
+fn run_and_compare_output_3x(program: &str, expected_output: &str, expected_err_output: &str) {
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+
+    basic::execute(&program, &mut stdout, &mut stderr).expect("execute failed");
+    let output = String::from_utf8(stdout).unwrap();
+    let err_output = String::from_utf8(stderr).unwrap();
+
+    assert_eq!(
+        output,
+        expected_output,
+        "\nDiff:\n{}\n",
+        diff(&output, expected_output)
+    );
+
+    assert_eq!(
+        err_output,
+        expected_err_output,
+        "\nDiff:\n{}\n",
+        diff(&err_output, &expected_err_output)
+    );
+
+    for _ in 1..3 {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        basic::execute(&program, &mut stdout, &mut stderr).expect("execute failed");
+
+        let next_output = String::from_utf8(stdout).unwrap();
+        let next_err_output = String::from_utf8(stderr).unwrap();
+
+        assert_eq!(
+            next_output,
+            output,
+            "\nDiff:\n{}\n",
+            diff(&next_output, &output)
+        );
+
+        assert_eq!(
+            next_err_output,
+            err_output,
+            "\nDiff:\n{}\n",
+            diff(&next_err_output, &err_output)
+        );
+    }
 }
 
 fn diff(from: &str, to: &str) -> String {
@@ -201,7 +262,7 @@ test_program!(P126);
 test_program!(P127);
 test_program!(P128);
 test_program!(P129);
-try_test_program!(P130);
+test_program_3x!(P130);
 try_test_program!(P131);
 try_test_program!(P132);
 try_test_program!(P133);
