@@ -184,16 +184,9 @@ named!(string_constant<Span, StringConstant>,
 
 named!(variable<Span, Variable>,
     alt!(
-        do_parse!(
-            var: numeric_variable >>
-            (Variable::Numeric(var))
-        ) |
-        do_parse!(
-            var: string_variable >>
-            (Variable::String(var))
-        )
-    )
-);
+        map!(numeric_variable, Variable::Numeric) |
+        map!(string_variable, Variable::String)
+    ));
 
 named!(numeric_variable<Span, NumericVariable>,
     alt!(simple_numeric_variable));
@@ -437,46 +430,26 @@ named!(print_separator<Span, PrintItem>,
 named!(read_statement<Span, Statement>,
     do_parse!(
         tag!("READ") >>
-        space0 >>
-        variables: many1!(
-            do_parse!(
-                space0 >>
-                opt!(char!(',')) >>
-                space0 >>
-                variable: variable >>
-                (variable)
-            )
-        ) >>
+        space >>
+        variables: separated_nonempty_list!(
+            delimited!(space0, char!(','), space0), variable) >>
         (Statement::Read(variables))
     )
 );
 
 named!(restore_statement<Span, Statement>,
-    do_parse!(
-        tag!("RESTORE") >>
-        space0 >>
-        (Statement::Restore)
-    )
-);
+    map!(tag!("RESTORE"), |_| Statement::Restore));
 
 // 17. DATA statement
 
-named!(data_statement<Span, Statement>, 
+named!(data_statement<Span, Statement>,
     do_parse!(
         tag!("DATA") >>
-        space0 >>
-        datum: many1!(
-            do_parse!(
-                space0 >>
-                opt!(char!(',')) >>
-                space0 >>
-                expression: expression >>
-                (expression)
-            )
-        ) >>
+        space >>
+        datum: separated_nonempty_list!(
+            delimited!(space0, char!(','), space0), expression) >>
         (Statement::Data(datum))
-    )
-);
+    ));
 
 // 19. REMARK statement
 

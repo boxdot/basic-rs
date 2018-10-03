@@ -35,8 +35,7 @@ impl<'a> Program<'a> {
                     line_numbers: line_numbers.collect(),
                 })
             } else {
-                let program = Self::build_program(blocks)?;
-                Ok(program)
+                Self::build_program(blocks)
             }
         } else {
             Err(Error::MissingEnd {
@@ -44,7 +43,7 @@ impl<'a> Program<'a> {
                     .last()
                     .map(|b| match b {
                         Block::Line { line_number, .. } => *line_number,
-                    }).unwrap_or(0u16),
+                    }).unwrap_or(0),
             })
         }
     }
@@ -67,12 +66,14 @@ impl<'a> Program<'a> {
             .map(|index| &self.blocks[*index])
     }
 
-    fn build_program(mut blocks: Vec<Block>) -> Result<Program, Error> {
-        let mut program_blocks = Vec::new();
+    fn build_program(all_blocks: Vec<Block>) -> Result<Program, Error> {
+        let mut blocks = Vec::new();
         let mut block_index = HashMap::new();
         let mut datum = Vec::new();
         let mut index = 0;
-        for block in blocks.drain(..) {
+        // Iterate through all blocks and distribute them into blocks or datum.
+        // At the same time index non-datum blocks.
+        for block in all_blocks {
             match block {
                 Block::Line {
                     line_number,
@@ -87,7 +88,7 @@ impl<'a> Program<'a> {
                             return Err(Error::DuplicateLineNumber { line_number });
                         }
                         index += 1;
-                        program_blocks.push(Block::Line {
+                        blocks.push(Block::Line {
                             line_number,
                             statement,
                             statement_source,
@@ -97,7 +98,7 @@ impl<'a> Program<'a> {
             }
         }
         Ok(Program {
-            blocks: program_blocks,
+            blocks,
             block_index,
             datum,
         })
