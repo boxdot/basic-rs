@@ -177,7 +177,7 @@ try_test_program!(P102);
 try_test_program!(P103);
 try_test_program!(P104);
 test_program!(P105);
-try_test_program!(P106);
+test_program!(P106);
 try_test_program!(P107);
 try_test_program!(P108);
 try_test_program!(P109);

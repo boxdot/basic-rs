@@ -216,6 +216,7 @@ impl<'a> Interpreter<'a> {
                         columnar_position = next_columnar_position;
                     } else {
                         write!(stdout, "\n");
+                        columnar_position = 0;
                     }
                 }
                 PrintItem::Semicolon => (),
@@ -357,9 +358,8 @@ impl<'a> Interpreter<'a> {
                 (Variable::String(v), Constant::Numeric(c)) => {
                     // reinterpret numeric constant as a string
                     let value = self.evaluate_numeric_constant(&c, stderr)?;
-                    self.state
-                        .string_values
-                        .insert(*v, format_float(value).trim().into());
+                    let value = format_float(value).trim().into();
+                    self.state.string_values.insert(*v, value);
                 }
                 (_, _) => {
                     return Err(Error::ReadDatatypeMismatch {

@@ -2,7 +2,7 @@ use ast::*;
 use error::Error;
 
 use nom::types::CompleteStr;
-use nom::{eol, space, space0, Err, IResult};
+use nom::{eol, space, space0, IResult};
 use nom_locate::LocatedSpan;
 
 use std::fmt;
