@@ -4,6 +4,8 @@ use nom::types::CompleteStr;
 use std::convert;
 use std::fmt;
 
+// FIXME: src_line_number here has a wrong name. It stands for BASIC line number label,
+// however we use src_line_number in interpretor for the real line number in the source code.
 #[derive(Debug)]
 pub enum Error {
     Parser(String),

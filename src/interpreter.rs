@@ -15,6 +15,7 @@ pub struct Interpreter<'a> {
 
 #[derive(Debug, Default)]
 struct State {
+    block_pointer: usize,
     /// BASIC line number label of the current statement
     current_line_number: u16,
     /// Offset in the source code of the current statement
@@ -55,8 +56,15 @@ impl<'a> Interpreter<'a> {
         stdout: &mut W,
         stderr: &mut V,
     ) -> Result<(), Error> {
-        let mut block = self.program.first_block();
         loop {
+            let block = self
+                .program
+                .blocks
+                .get(self.state.block_pointer)
+                .ok_or_else(|| Error::MissingEnd {
+                    src_line_number: self.state.current_line_number,
+                })?;
+
             let action = match block {
                 Block::Line {
                     line_number,
@@ -73,11 +81,11 @@ impl<'a> Interpreter<'a> {
             let source_offset = self.state.current_source_offset;
 
             match action {
-                Action::NextLine => block = self.program.next_block(block),
+                Action::NextLine => self.state.block_pointer += 1,
                 Action::Goto(line_number) => {
-                    block = self
+                    self.state.block_pointer = self
                         .program
-                        .get_block_by_line_number(line_number)
+                        .get_block_index_by_line_number(line_number)
                         .ok_or_else(|| Error::UndefinedLineNumber {
                             src_line_number,
                             line_number,
@@ -85,20 +93,20 @@ impl<'a> Interpreter<'a> {
                         })?;
                 }
                 Action::GotoAndNextLine(line_number) => {
-                    let goto_block = self
+                    self.state.block_pointer = self
                         .program
-                        .get_block_by_line_number(line_number)
+                        .get_block_index_by_line_number(line_number)
                         .ok_or_else(|| Error::UndefinedLineNumber {
                             src_line_number,
                             line_number,
                             statement_source: self.get_source_line(source_offset).into(),
-                        })?;
-                    block = self.program.next_block(goto_block);
+                        })?
+                        + 1;
                 }
                 Action::Gosub(line_number) => {
-                    block = self
+                    self.state.block_pointer = self
                         .program
-                        .get_block_by_line_number(line_number)
+                        .get_block_index_by_line_number(line_number)
                         .ok_or_else(|| Error::UndefinedLineNumber {
                             src_line_number,
                             line_number,
@@ -112,15 +120,15 @@ impl<'a> Interpreter<'a> {
                         .stack
                         .pop()
                         .ok_or_else(|| Error::UnexpectedReturn { src_line_number })?;
-                    let prev_block = self
+                    self.state.block_pointer = self
                         .program
-                        .get_block_by_line_number(prev_line_number)
+                        .get_block_index_by_line_number(prev_line_number)
                         .ok_or_else(|| Error::UndefinedLineNumber {
                             src_line_number,
                             line_number: prev_line_number,
                             statement_source: self.get_source_line(source_offset).into(),
-                        })?;
-                    block = self.program.next_block(prev_block);
+                        })?
+                        + 1;
                 }
                 Action::Stop => break,
             }

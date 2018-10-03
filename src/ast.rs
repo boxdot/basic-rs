@@ -49,16 +49,8 @@ impl<'a> Program<'a> {
         }
     }
 
-    pub fn first_block(&self) -> &Block {
-        self.blocks.first().expect("logic error")
-    }
-
-    pub fn next_block<'b>(&'a self, block: &'b Block) -> &'a Block {
-        let line_number = match block {
-            Block::Line { line_number, .. } => line_number,
-        };
-        let index = self.block_index.get(line_number).expect("logic error");
-        &self.blocks[index + 1]
+    pub fn get_block_index_by_line_number(&self, line_number: u16) -> Option<usize> {
+        self.block_index.get(&line_number).cloned()
     }
 
     pub fn get_block_by_line_number(&self, line_number: u16) -> Option<&Block> {
