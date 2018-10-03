@@ -31,37 +31,30 @@ macro_rules! test_program {
 }
 
 fn run_and_compare_output(program: &str, expected_output: &str, expected_err_output: &str) {
-    let res = basic::execute(&program);
-    match res {
-        Ok((output, err_output)) => {
-            if expected_output.contains("TEST PASSED") {
-                assert!(output.contains("TEST PASSED"));
-            } else {
-                assert_eq!(
-                    output,
-                    expected_output,
-                    "\nDiff:\n{}\n",
-                    diff(&output, expected_output)
-                );
-            }
-            assert_eq!(
-                err_output,
-                expected_err_output,
-                "\nDiff:\n{}\n",
-                diff(&err_output, &expected_err_output)
-            );
-        }
-        Err(e) => {
-            assert!(expected_output.is_empty());
-            let stderr = format!("{}", e);
-            assert_eq!(
-                stderr,
-                expected_err_output,
-                "\nDiff:\n{}\n",
-                diff(&stderr, &expected_err_output)
-            );
-        }
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+
+    let res = basic::execute(&program, &mut stdout, &mut stderr);
+
+    let output = String::from_utf8(stdout).unwrap();
+    let mut err_output = String::from_utf8(stderr).unwrap();
+    if let Err(e) = res {
+        err_output += &format!("{}", e);
     }
+
+    assert_eq!(
+        output,
+        expected_output,
+        "\nDiff:\n{}\n",
+        diff(&output, expected_output)
+    );
+
+    assert_eq!(
+        err_output,
+        expected_err_output,
+        "\nDiff:\n{}\n",
+        diff(&err_output, &expected_err_output)
+    );
 }
 
 fn diff(from: &str, to: &str) -> String {
@@ -113,11 +106,11 @@ test_program!(P035);
 test_program!(P036);
 test_program!(P037);
 test_program!(P038);
-test_program!(P039);
-test_program!(P040);
+try_test_program!(P039);
+try_test_program!(P040);
 test_program!(P041);
 test_program!(P042);
-test_program!(P043);
+try_test_program!(P043);
 try_test_program!(P044);
 try_test_program!(P045);
 try_test_program!(P046);
@@ -179,7 +172,7 @@ try_test_program!(P101);
 try_test_program!(P102);
 try_test_program!(P103);
 try_test_program!(P104);
-try_test_program!(P105);
+test_program!(P105);
 try_test_program!(P106);
 try_test_program!(P107);
 try_test_program!(P108);
@@ -247,10 +240,10 @@ try_test_program!(P169);
 try_test_program!(P170);
 try_test_program!(P171);
 try_test_program!(P172);
-try_test_program!(P173);
+test_program!(P173);
 try_test_program!(P174);
 try_test_program!(P175);
-try_test_program!(P176);
+test_program!(P176);
 try_test_program!(P177);
 try_test_program!(P178);
 try_test_program!(P179);

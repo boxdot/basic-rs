@@ -2,7 +2,7 @@ use ast::*;
 use error::Error;
 
 use nom::types::CompleteStr;
-use nom::{eol, space, space0, IResult};
+use nom::{eol, space, space0, Err, IResult};
 use nom_locate::LocatedSpan;
 
 use std::fmt;
@@ -94,12 +94,14 @@ named!(unquoted_string<Span, String>,
 
 // 5. Programs
 
-named!(pub program<Span, Result<Program, Error>>,
+pub fn program<'a>(input: Span<'a>) -> IResult<Span<'a>, Result<Program<'a>, Error>> {
     do_parse!(
-        blocks: many0!(terminated!(block, end_of_line)) >>
-        opt!(end_of_line) >>
-        (Program::new(blocks))
-    ));
+        input,
+        blocks: many0!(terminated!(block, end_of_line))
+            >> opt!(end_of_line)
+            >> (Program::new(blocks, input.fragment.as_ref()))
+    )
+}
 
 named!(pub block<Span, Block>,
     do_parse!(
