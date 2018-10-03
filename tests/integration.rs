@@ -35,9 +35,7 @@ fn run_and_compare_output(program: &str, expected_output: &str, expected_err_out
     match res {
         Ok((output, err_output)) => {
             if expected_output.contains("TEST PASSED") {
-                assert!(
-                    output.contains("TEST PASSED")
-                );
+                assert!(output.contains("TEST PASSED"));
             } else {
                 assert_eq!(
                     output,
@@ -171,12 +169,12 @@ try_test_program!(P091);
 try_test_program!(P092);
 try_test_program!(P093);
 try_test_program!(P094);
-try_test_program!(P095);
+test_program!(P095);
 test_program!(P096);
 try_test_program!(P097);
 try_test_program!(P098);
 try_test_program!(P099);
-try_test_program!(P100);
+test_program!(P100);
 try_test_program!(P101);
 try_test_program!(P102);
 try_test_program!(P103);
