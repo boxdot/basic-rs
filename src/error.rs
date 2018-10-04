@@ -44,6 +44,13 @@ pub enum Error {
         function: String,
         arg: f64,
     },
+    InvalidControlVariable {
+        src_line_number: u16,
+        control_variable: String,
+    },
+    JumpIntoFor {
+        src_line_number: u16,
+    },
 }
 
 impl<'a> convert::From<nom::Err<Span<'a>>> for Error {
@@ -130,6 +137,17 @@ impl fmt::Display for Error {
                 "{}: error: function domain error {}({})\n",
                 src_line_number, function, arg
             ),
+            Error::InvalidControlVariable {
+                src_line_number,
+                ref control_variable,
+            } => write!(
+                f,
+                "{}: error: invalid control variable {}\n",
+                src_line_number, control_variable
+            ),
+            Error::JumpIntoFor { src_line_number } => {
+                write!(f, "{}: error: jump into FOR block \n", src_line_number)
+            }
         }
     }
 }

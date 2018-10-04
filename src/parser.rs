@@ -725,22 +725,8 @@ mod tests {
         let res = program(Span::new(CompleteStr(PROGRAM)))?;
         let (_, program) = res;
         let program = program?;
-        assert_eq!(program.blocks.len(), 3);
-        match &program.blocks[1] {
-            Block::For {
-                for_line,
-                blocks,
-                next_line,
-            } => {
-                assert_eq!(format!("{}", for_line.for_statement.control_variable), "I");
-                assert_eq!(blocks.len(), 2);
-                assert_eq!(
-                    format!("{}", next_line.next_statement.control_variable),
-                    "I"
-                );
-            }
-            _ => assert!(false),
-        }
+        // A FOR..NEXT-block is replaced by 7 equivalent lines + inner blocks
+        assert_eq!(program.blocks.len(), 1 + 7 + 2 + 1);
         Ok(())
     }
 }
