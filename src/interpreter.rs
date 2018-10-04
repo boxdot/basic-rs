@@ -27,6 +27,8 @@ struct State {
     string_values: HashMap<StringVariable, String>,
     /// stack of return line numbers for routines
     stack: Vec<u16>,
+    /// DATA statement pointer
+    data_pointer: u16,
 }
 
 #[derive(Debug)]
@@ -139,6 +141,15 @@ impl<'a> Interpreter<'a> {
                     Action::NextLine
                 }
             }
+            Statement::Read(variables) => {
+                self.evaluate_read(variables, stderr)?;
+                Action::NextLine
+            }
+            Statement::Restore => {
+                self.state.data_pointer = 0;
+                Action::NextLine
+            }
+            Statement::Data(_) => Action::NextLine,
             Statement::Rem => Action::NextLine,
             Statement::Return => Action::Return,
             Statement::Stop => Action::Stop,
@@ -321,6 +332,46 @@ impl<'a> Interpreter<'a> {
             .fold_results(0.0, |acc, (sign, term)| acc + *sign * term)
     }
 
+    fn evaluate_read<W: Write>(
+        &mut self,
+        variables: &Vec<Variable>,
+        stderr: &mut W,
+    ) -> Result<(), Error> {
+        for variable in variables {
+            let datum = self
+                .program
+                .data
+                .get(self.state.data_pointer as usize)
+                .ok_or_else(|| Error::MissingData {
+                    src_line_number: self.state.current_line_number,
+                })?;
+            match (variable, datum) {
+                (Variable::Numeric(v), Constant::Numeric(c)) => {
+                    let value = self.evaluate_numeric_constant(&c, stderr)?;
+                    self.state.numeric_values.insert(*v, value);
+                }
+                (Variable::String(v), Constant::String(s)) => {
+                    self.state.string_values.insert(*v, s.0.clone());
+                }
+                (Variable::String(v), Constant::Numeric(c)) => {
+                    // reinterpret numeric constant as a string
+                    let value = self.evaluate_numeric_constant(&c, stderr)?;
+                    self.state
+                        .string_values
+                        .insert(*v, format_float(value).trim().into());
+                }
+                (_, _) => {
+                    return Err(Error::ReadDatatypeMismatch {
+                        src_line_number: self.state.current_line_number,
+                        data_pointer: self.state.data_pointer,
+                    })
+                }
+            }
+            self.state.data_pointer += 1;
+        }
+        Ok(())
+    }
+
     fn evaluate_term<W: Write>(&self, term: &Term, stderr: &mut W) -> Result<f64, Error> {
         let mut acc = self.evaluate_factor(&term.factor, stderr)?;
         for (multiplier, factor) in &term.factors {
@@ -369,25 +420,7 @@ impl<'a> Interpreter<'a> {
     fn evaluate_primary<W: Write>(&self, primary: &Primary, stderr: &mut W) -> Result<f64, Error> {
         let value = match primary {
             Primary::Variable(v) => self.evaluate_numeric_variable(v)?,
-            Primary::Constant(significand, exrad) => {
-                if *significand == 0.0 && *exrad < 0 {
-                    self.warn(
-                        stderr,
-                        &format!(
-                            "zero raised to negative value ({} * {})",
-                            significand, exrad
-                        ),
-                    );
-                }
-                let c = significand * 10f64.powi(*exrad);
-                if c.is_infinite() {
-                    let line = self.get_source_line(self.state.current_source_offset);
-                    let (_, span) =
-                        parser::let_statement_numeric_constant_pos(line).expect("parser bug");
-                    self.warn_with_cursor(stderr, "numeric constant overflow ", span.offset);
-                }
-                c
-            }
+            Primary::Constant(c) => self.evaluate_numeric_constant(c, stderr)?,
             Primary::Expression(e) => self.evaluate_numeric_expression(e, stderr)?,
         };
         Ok(value)
@@ -400,6 +433,29 @@ impl<'a> Interpreter<'a> {
             .get(variable)
             .cloned()
             .unwrap_or(0f64))
+    }
+
+    fn evaluate_numeric_constant<W: Write>(
+        &self,
+        constant: &NumericConstant,
+        stderr: &mut W,
+    ) -> Result<f64, Error> {
+        if constant.significand == 0.0 && constant.exrad < 0 {
+            self.warn(
+                stderr,
+                &format!(
+                    "zero raised to negative value ({} * {})",
+                    constant.significand, constant.exrad
+                ),
+            );
+        }
+        let c = constant.sign * constant.significand * 10f64.powi(constant.exrad);
+        if c.is_infinite() {
+            let line = self.get_source_line(self.state.current_source_offset);
+            let (_, span) = parser::let_statement_numeric_constant_pos(line).expect("parser bug");
+            self.warn_with_cursor(stderr, "numeric constant overflow ", span.offset);
+        }
+        Ok(c)
     }
 
     // Helper functions
@@ -422,7 +478,6 @@ impl<'a> Interpreter<'a> {
     /// `cursor_fragment` must be a substring of the current statement source code.
     /// At the beginning of the substring a cursor marker `^` is generated.
     fn warn_with_cursor<W: Write, S: AsRef<str>>(&self, stderr: &mut W, message: S, cursor: usize) {
-        println!("cursor: {:?}", cursor);
         let statement_source = self.get_source_line(self.state.current_source_offset as usize);
         write!(
             stderr,

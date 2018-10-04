@@ -76,6 +76,22 @@ named!(letter<Span, char>,
 named!(digit<Span, u8>,
     map!(one_of!("0123456789"), |c| c as u8 - b'0'));
 
+named!(unquoted_string_character<Span, char>,
+    alt!(char!(' ') | plain_string_character));
+
+named!(plain_string_character<Span, char>,
+    alt!(
+        char!('+') |
+        char!('-') |
+        char!('.') |
+        one_of!("0123456789") |
+        letter
+    ));
+
+named!(unquoted_string<Span, String>,
+    map!(many1!(unquoted_string_character), {
+        |chars: Vec<char>| chars.into_iter().collect::<String>()}));
+
 // 5. Programs
 
 named!(pub program<Span, Result<Program, Error>>,
@@ -119,6 +135,9 @@ named!(statement<Span, (Statement, Span)>,
             print_statement |
             return_statement |
             stop_statement |
+            read_statement |
+            restore_statement |
+            data_statement |
             remark_statement |
             end_statement) >>
         (statement, statement_source)
@@ -126,12 +145,16 @@ named!(statement<Span, (Statement, Span)>,
 
 // 6. Constants
 
-named!(numeric_constant<Span, (Sign, f64, i32)>,
+named!(numeric_constant<Span, NumericConstant>,
     do_parse!(
         sign: opt!(sign) >>
         space0 >>
         numeric_rep: numeric_rep >>
-        (sign.unwrap_or(Sign::Pos), numeric_rep.0, numeric_rep.1)
+        (NumericConstant {
+            sign: sign.unwrap_or(Sign::Pos),
+            significand: numeric_rep.0,
+            exrad: numeric_rep.1
+        })
     ));
 
 named!(sign<Span, Sign>,
@@ -174,11 +197,17 @@ named!(exrad<Span, i32>,
 
 named!(string_constant<Span, StringConstant>,
     do_parse!(
-        s: delimited!(tag!("\""), take_until!("\""), tag!("\"")) >>
+        s: delimited!(char!('"'), take_until!("\""), char!('"')) >>
         (StringConstant(s.to_string()))
     ));
 
 // 7. Variables
+
+named!(variable<Span, Variable>,
+    alt!(
+        map!(string_variable, Variable::String) |
+        map!(numeric_variable, Variable::Numeric)
+    ));
 
 named!(numeric_variable<Span, NumericVariable>,
     alt!(simple_numeric_variable));
@@ -247,7 +276,7 @@ named!(multiplier<Span, Multiplier>,
 named!(primary<Span, Primary>,
     alt!(
         map!(numeric_variable, Primary::Variable) |
-        map!(numeric_rep, |(significand, exrad)| Primary::Constant(significand, exrad)) |
+        numeric_rep => { |value| Primary::Constant(NumericConstant::from(value)) } |
         map!(delimited!(char!('('), numeric_expression, char!(')')), Primary::Expression)
     ));
 
@@ -417,12 +446,46 @@ named!(print_separator<Span, PrintItem>,
         char!(';') => { |_| PrintItem::Semicolon }
     )), space0));
 
+// 16. READ and RESTORE statements
+
+named!(read_statement<Span, Statement>,
+    do_parse!(
+        tag!("READ") >>
+        space >>
+        variables: separated_nonempty_list!(char!(','), variable) >>
+        (Statement::Read(variables))
+    )
+);
+
+named!(restore_statement<Span, Statement>,
+    map!(tag!("RESTORE"), |_| Statement::Restore));
+
+// 17. DATA statement
+
+named!(data_statement<Span, Statement>,
+    do_parse!(
+        tag!("DATA") >>
+        space >>
+        data: data_list >>
+        (Statement::Data(data))
+    ));
+
+named!(data_list<Span, Vec<Constant>>,
+    separated_nonempty_list!(
+        delimited!(space0, char!(','), space0), datum));
+
+named!(datum<Span, Constant>,
+    alt!(
+        map!(numeric_constant, Constant::Numeric) |
+        unquoted_string => { |s| Constant::String(StringConstant(s)) } |
+        map!(string_constant, Constant::String)
+    ));
+
 // 19. REMARK statement
 
 named!(remark_statement<Span, Statement>,
     do_parse!(
         tag!("REM") >>
-        space0 >>
         take_until!("\n") >>
         (Statement::Rem)
     ));
@@ -455,7 +518,10 @@ mod tests {
             ast,
             PrintItem::TabCall(NumericExpression::new(
                 None,
-                Term::new(Factor::new(Primary::Constant(24.0, 0), vec![]), vec![]),
+                Term::new(
+                    Factor::new(Primary::Constant(NumericConstant::from((24.0, 0))), vec![]),
+                    vec![]
+                ),
                 vec![]
             ))
         );
@@ -472,7 +538,10 @@ mod tests {
             Statement::Print(PrintStatement {
                 list: vec![PrintItem::TabCall(NumericExpression::new(
                     None,
-                    Term::new(Factor::new(Primary::Constant(24.0, 0), vec![]), vec![]),
+                    Term::new(
+                        Factor::new(Primary::Constant(NumericConstant::from((24.0, 0))), vec![]),
+                        vec![]
+                    ),
                     vec![],
                 ))],
             })
@@ -512,9 +581,17 @@ mod tests {
     #[test]
     fn test_numeric_constant() {
         let res = numeric_constant(Span::new(CompleteStr("-123456E-29")));
-        let (remaining, float) = res.expect("failed to parse");
+        let (remaining, value) = res.expect("failed to parse");
         let remaining = remaining.fragment;
         assert!(remaining.is_empty(), "Remaing is not empty: {}", remaining);
-        assert_eq!(float, (Sign::Neg, 123456f64, -29));
+        assert_eq!(value, NumericConstant::from((-123456f64, -29)));
+    }
+
+    #[test]
+    fn test_data() {
+        let res = data_statement(Span::new(CompleteStr("DATA 7,8,9,10")));
+        let (remaining, _value) = res.expect("failed to parse");
+        let remaining = remaining.fragment;
+        assert!(remaining.is_empty(), "Remaing is not empty: {}", remaining);
     }
 }

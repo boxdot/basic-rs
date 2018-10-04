@@ -9,6 +9,7 @@ use std::ops;
 pub struct Program<'a> {
     pub blocks: Vec<Block<'a>>,
     block_index: HashMap<u16, usize>,
+    pub data: Vec<Constant>,
 }
 
 impl<'a> Program<'a> {
@@ -34,11 +35,7 @@ impl<'a> Program<'a> {
                     line_numbers: line_numbers.collect(),
                 })
             } else {
-                let block_index = Self::build_block_index(&blocks)?;
-                Ok(Program {
-                    blocks,
-                    block_index,
-                })
+                Self::build_program(blocks)
             }
         } else {
             Err(Error::MissingEnd {
@@ -46,7 +43,7 @@ impl<'a> Program<'a> {
                     .last()
                     .map(|b| match b {
                         Block::Line { line_number, .. } => *line_number,
-                    }).unwrap_or(0u16),
+                    }).unwrap_or(0),
             })
         }
     }
@@ -69,11 +66,26 @@ impl<'a> Program<'a> {
             .map(|index| &self.blocks[*index])
     }
 
-    fn build_block_index(blocks: &[Block]) -> Result<HashMap<u16, usize>, Error> {
+    fn build_program(mut blocks: Vec<Block>) -> Result<Program, Error> {
         let mut block_index = HashMap::new();
-        for (index, block) in blocks.iter().enumerate() {
+        let mut data = Vec::new();
+        // Create index of all blocks and move out all data block into `data`
+        // FIXME: We could increase performance by removing data blocks from all blocks,
+        // however we still need to keep index of them, since a GOTO statement could jump
+        // on a data block. For that, we most likely need to use something like skip lists.
+        for (index, block) in blocks.iter_mut().enumerate() {
             match block {
-                Block::Line { line_number, .. } => {
+                Block::Line {
+                    line_number,
+                    ref mut statement,
+                    ..
+                } => {
+                    match statement {
+                        Statement::Data(ref mut statement_data) => {
+                            data.append(statement_data);
+                        }
+                        _ => (),
+                    };
                     if block_index.insert(*line_number, index).is_some() {
                         return Err(Error::DuplicateLineNumber {
                             line_number: *line_number,
@@ -82,7 +94,11 @@ impl<'a> Program<'a> {
                 }
             }
         }
-        Ok(block_index)
+        Ok(Program {
+            blocks,
+            block_index,
+            data,
+        })
     }
 }
 
@@ -108,6 +124,9 @@ pub enum Statement {
     Goto(u16),
     Gosub(u16),
     IfThen(RelationalExpression, u16),
+    Read(Vec<Variable>),
+    Data(Vec<Constant>),
+    Restore,
     Rem,
     Return,
     Stop,
@@ -116,13 +135,9 @@ pub enum Statement {
 
 // 6. Constants
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Constant {
-    Numeric {
-        sign: Sign,
-        significand: f64,
-        exrad: i32,
-    },
+    Numeric(NumericConstant),
     String(StringConstant),
 }
 
@@ -148,6 +163,27 @@ impl ops::Mul<i32> for Sign {
         match self {
             Sign::Pos => val,
             Sign::Neg => -val,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct NumericConstant {
+    pub sign: Sign,
+    pub significand: f64,
+    pub exrad: i32,
+}
+
+impl From<(f64, i32)> for NumericConstant {
+    fn from((significand, exrad): (f64, i32)) -> Self {
+        Self {
+            sign: if significand >= 0.0 {
+                Sign::Pos
+            } else {
+                Sign::Neg
+            },
+            significand: significand.abs(),
+            exrad,
         }
     }
 }
@@ -186,7 +222,7 @@ impl fmt::Display for StringVariable {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Variable {
     Numeric(NumericVariable),
     String(StringVariable),
@@ -217,7 +253,10 @@ impl NumericExpression {
         NumericExpression::new(
             Some(if value >= 0.0 { Sign::Pos } else { Sign::Neg }),
             Term::new(
-                Factor::new(Primary::Constant(value.abs(), 0), vec![]),
+                Factor::new(
+                    Primary::Constant(NumericConstant::from((value.abs(), 0))),
+                    vec![],
+                ),
                 vec![],
             ),
             vec![],
@@ -259,7 +298,7 @@ pub enum Multiplier {
 #[derive(Debug, PartialEq)]
 pub enum Primary {
     Variable(NumericVariable),
-    Constant(f64, i32),
+    Constant(NumericConstant),
     Expression(NumericExpression),
 }
 

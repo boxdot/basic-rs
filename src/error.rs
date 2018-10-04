@@ -30,6 +30,13 @@ pub enum Error {
         value: f64,
         exp: f64,
     },
+    MissingData {
+        src_line_number: u16,
+    },
+    ReadDatatypeMismatch {
+        src_line_number: u16,
+        data_pointer: u16,
+    },
 }
 
 impl<'a> convert::From<nom::Err<CompleteStr<'a>>> for Error {
@@ -87,6 +94,17 @@ impl fmt::Display for Error {
                 f,
                 "{}: error: negative value raised to non-integral value ({} ^ {})\n",
                 src_line_number, value, exp
+            ),
+            Error::MissingData { src_line_number } => {
+                write!(f, "{}: error: missing data\n", src_line_number)
+            }
+            Error::ReadDatatypeMismatch {
+                src_line_number,
+                data_pointer,
+            } => write!(
+                f,
+                "{}: error: mismatch between read statement and DATA at position {}",
+                src_line_number, data_pointer
             ),
         }
     }
