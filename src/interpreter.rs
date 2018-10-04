@@ -88,6 +88,7 @@ impl<'a> Interpreter<'a> {
                     self.state.current_source_offset = statement_source.offset;
                     self.evaluate_statement(statement, stdout, stderr)?
                 }
+                Block::For { .. } => unimplemented!(),
             };
 
             let src_line_number = self.state.current_line_number;
@@ -252,7 +253,8 @@ impl<'a> Interpreter<'a> {
                 PrintItem::Semicolon => true,
                 PrintItem::Comma => true,
                 _ => false,
-            }).unwrap_or(false);
+            })
+            .unwrap_or(false);
         if !last_item_is_comma_or_semicolon {
             self.state.columnar_position = 0;
             write!(stdout, "\n");
