@@ -52,11 +52,19 @@ pub fn execute<W: Write, V: Write>(
 fn syntax_error_with_cursor<'a>(remaining: &'a str) -> Result<String, Error> {
     let failed_line = remaining.lines().next().unwrap();
     let failed_span = parser::Span::new(CompleteStr(failed_line));
-    let (remaining, _) = parser::block(failed_span)?;
+
+    // extract fragment where the parser failed from all possible errors
+    let failed_fragment = match parser::line(failed_span) {
+        Ok((span, _)) => span.fragment,
+        Err(nom::Err::Error(Context::Code(span, _))) => span.fragment,
+        Err(nom::Err::Failure(Context::Code(span, _))) => span.fragment,
+        Err(e) => return Err(Error::from(e)),
+    };
+
     let mut parts = failed_line.splitn(2, ' ');
     let line_number = parts.next().unwrap();
     let statement = parts.next().unwrap();
-    let failed_pos = statement.find(remaining.fragment.as_ref()).unwrap();
+    let failed_pos = statement.find(failed_fragment.as_ref()).unwrap();
     Ok(format!(
         "{}: error: syntax error \n {}\n {:cursor$}^\n",
         line_number,

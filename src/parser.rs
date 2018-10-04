@@ -97,21 +97,27 @@ named!(unquoted_string<Span, String>,
 pub fn program<'a>(input: Span<'a>) -> IResult<Span<'a>, Result<Program<'a>, Error>> {
     do_parse!(
         input,
-        blocks: many0!(terminated!(block, end_of_line))
+        blocks: many0!(block)
             >> opt!(end_of_line)
             >> (Program::new(blocks, input.fragment.as_ref()))
     )
 }
 
-named!(pub block<Span, Block>,
+named!(block<Span, Block>,
+    alt!(line | for_block));
+
+named!(pub line<Span, Block>,
     do_parse!(
         line_number: line_number >>
-        statement: sep!(space, statement) >>
+        space >>
+        statement_source: position!() >>
+        statement: statement >>
         space0 >>
+        end_of_line >>
         (Block::Line{
             line_number,
-            statement: statement.0,
-            statement_source: statement.1
+            statement,
+            statement_source,
         })
     ));
 
@@ -126,23 +132,20 @@ named!(end_statement<Span, Statement>,
         (Statement::End)
     ));
 
-named!(statement<Span, (Statement, Span)>,
-    do_parse!(
-        statement_source: position!() >>
-        statement: alt!(
-            goto_statement |
-            gosub_statement |
-            if_then_statement |
-            let_statement |
-            print_statement |
-            return_statement |
-            stop_statement |
-            read_statement |
-            restore_statement |
-            data_statement |
-            remark_statement |
-            end_statement) >>
-        (statement, statement_source)
+named!(statement<Span, Statement>,
+    alt!(
+        goto_statement |
+        gosub_statement |
+        if_then_statement |
+        let_statement |
+        print_statement |
+        return_statement |
+        stop_statement |
+        read_statement |
+        restore_statement |
+        data_statement |
+        remark_statement |
+        end_statement
     ));
 
 // 6. Constants
@@ -439,6 +442,92 @@ named!(stop_statement<Span, Statement>,
         (Statement::Stop)
     ));
 
+// 13. FOR and NEXT statements
+
+named!(for_block<Span, Block>,
+    do_parse!(
+        for_line: for_line >>
+        for_body: for_body >>
+        (Block::For {
+            for_line,
+            blocks: for_body.0,
+            next_line: for_body.1,
+        })
+    ));
+
+named!(for_body<Span, (Vec<Block>, NextLine)>,
+    do_parse!(
+        blocks: many0!(block) >>
+        next_line: next_line >>
+        ((blocks, next_line))
+    ));
+
+named!(for_line<Span, ForLine>,
+    do_parse!(
+        line_number: line_number >>
+        space >>
+        statement_source: position!() >>
+        for_statement: for_statement >>
+        space0 >>
+        end_of_line >>
+        (ForLine{
+            line_number,
+            for_statement,
+            statement_source,
+        })
+    ));
+
+named!(next_line<Span, NextLine>,
+    do_parse!(
+        line_number: line_number >>
+        space >>
+        statement_source: position!() >>
+        next_statement: next_statement >>
+        space0 >>
+        end_of_line >>
+        (NextLine{
+            line_number,
+            next_statement,
+            statement_source,
+        })
+    ));
+
+named!(for_statement<Span, ForStatement>,
+    do_parse!(
+        tag!("FOR") >>
+        space >>
+        control_variable: simple_numeric_variable >>
+        space0 >>
+        char!('=') >>
+        space0 >>
+        initial_value: numeric_expression >>
+        space >>
+        tag!("TO") >>
+        space >>
+        limit: numeric_expression >>
+        space0 >>
+        opt!(tag!("STEP")) >>
+        space0 >>
+        increment: opt!(numeric_expression) >>
+        space0 >>
+        (ForStatement {
+            control_variable,
+            initial_value,
+            limit,
+            increment
+        })
+    ));
+
+named!(next_statement<Span, NextStatement>,
+    do_parse!(
+        tag!("NEXT") >>
+        space >>
+        control_variable: simple_numeric_variable >>
+        (NextStatement {
+            control_variable
+        })
+    ));
+
 // 14. PRINT statement
 
 named!(print_statement<Span, Statement>,
@@ -621,5 +710,37 @@ mod tests {
         let (remaining, _value) = res.expect("failed to parse");
         let remaining = remaining.fragment;
         assert!(remaining.is_empty(), "Remaing is not empty: {}", remaining);
+    }
+
+    #[test]
+    fn test_for_block() -> Result<(), Error> {
+        const PROGRAM: &str = r#"100 PRINT "Hello, World!"
+110 FOR I = 0 TO 10 STEP 1
+120 PRINT "Wow!"
+121 PRINT "Wow!"
+130 NEXT I
+140 END
+"#;
+
+        let res = program(Span::new(CompleteStr(PROGRAM)))?;
+        let (_, program) = res;
+        let program = program?;
+        assert_eq!(program.blocks.len(), 3);
+        match &program.blocks[1] {
+            Block::For {
+                for_line,
+                blocks,
+                next_line,
+            } => {
+                assert_eq!(format!("{}", for_line.for_statement.control_variable), "I");
+                assert_eq!(blocks.len(), 2);
+                assert_eq!(
+                    format!("{}", next_line.next_statement.control_variable),
+                    "I"
+                );
+            }
+            _ => assert!(false),
+        }
+        Ok(())
     }
 }

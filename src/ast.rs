@@ -24,13 +24,10 @@ impl<'a> Program<'a> {
 
         if let Some(end_statement_pos) = end_statement_pos {
             if end_statement_pos + 1 != blocks.len() {
-                let line_numbers =
-                    blocks
-                        .into_iter()
-                        .skip(end_statement_pos + 1)
-                        .map(|b| match b {
-                            Block::Line { line_number, .. } => line_number,
-                        });
+                let line_numbers = blocks
+                    .iter()
+                    .skip(end_statement_pos + 1)
+                    .map(Block::line_number);
                 Err(Error::StatementsAfterEnd {
                     line_numbers: line_numbers.collect(),
                 })
@@ -41,11 +38,7 @@ impl<'a> Program<'a> {
             }
         } else {
             Err(Error::MissingEnd {
-                src_line_number: blocks
-                    .last()
-                    .map(|b| match b {
-                        Block::Line { line_number, .. } => *line_number,
-                    }).unwrap_or(0),
+                src_line_number: blocks.last().map(Block::line_number).unwrap_or(0),
             })
         }
     }
@@ -55,10 +48,8 @@ impl<'a> Program<'a> {
     }
 
     pub fn next_block<'b>(&'a self, block: &'b Block) -> &'a Block {
-        let line_number = match block {
-            Block::Line { line_number, .. } => line_number,
-        };
-        let index = self.block_index.get(line_number).expect("logic error");
+        let line_number = block.line_number();
+        let index = self.block_index.get(&line_number).expect("logic error");
         &self.blocks[index + 1]
     }
 
@@ -78,9 +69,7 @@ impl<'a> Program<'a> {
         for (index, block) in blocks.iter_mut().enumerate() {
             match block {
                 Block::Line {
-                    line_number,
-                    ref mut statement,
-                    ..
+                    ref mut statement, ..
                 } => {
                     match statement {
                         Statement::Data(ref mut statement_data) => {
@@ -88,12 +77,12 @@ impl<'a> Program<'a> {
                         }
                         _ => (),
                     };
-                    if block_index.insert(*line_number, index).is_some() {
-                        return Err(Error::DuplicateLineNumber {
-                            line_number: *line_number,
-                        });
-                    }
                 }
+                _ => (),
+            }
+            let line_number = block.line_number();
+            if block_index.insert(line_number, index).is_some() {
+                return Err(Error::DuplicateLineNumber { line_number });
             }
         }
         Ok(Program {
@@ -144,6 +133,7 @@ impl<'a> Program<'a> {
                     }
                     _ => (),
                 },
+                _ => (),
             }
         }
         Ok(())
@@ -157,6 +147,34 @@ pub enum Block<'a> {
         statement_source: Span<'a>,
         statement: Statement,
     },
+    For {
+        for_line: ForLine<'a>,
+        blocks: Vec<Block<'a>>,
+        next_line: NextLine<'a>,
+    },
+}
+
+impl<'a> Block<'a> {
+    fn line_number(&self) -> u16 {
+        match self {
+            Block::Line { line_number, .. } => *line_number,
+            Block::For { for_line, .. } => for_line.line_number,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ForLine<'a> {
+    pub line_number: u16,
+    pub statement_source: Span<'a>,
+    pub for_statement: ForStatement,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct NextLine<'a> {
+    pub line_number: u16,
+    pub statement_source: Span<'a>,
+    pub next_statement: NextStatement,
 }
 
 #[derive(Debug, PartialEq)]
@@ -179,6 +197,19 @@ pub enum Statement {
     Return,
     Stop,
     End,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ForStatement {
+    pub control_variable: NumericVariable,
+    pub initial_value: NumericExpression,
+    pub limit: NumericExpression,
+    pub increment: Option<NumericExpression>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct NextStatement {
+    pub control_variable: NumericVariable,
 }
 
 // 6. Constants
