@@ -1,11 +1,16 @@
 use error::Error;
 use parser::Span;
 
+use nom::types::CompleteStr;
+
 use std::collections::HashMap;
 use std::fmt::{self, Write};
 use std::ops;
 
-#[derive(Debug)]
+// Note: a valid line number can only have max 4 digits.
+const FIRST_INTERNAL_LINE_NUMBER: u16 = 10001;
+
+#[derive(Debug, Default)]
 pub struct Program<'a> {
     pub blocks: Vec<Block<'a>>,
     block_index: HashMap<u16, usize>,
@@ -32,7 +37,8 @@ impl<'a> Program<'a> {
                     line_numbers: line_numbers.collect(),
                 })
             } else {
-                let program = Self::build_program(blocks)?;
+                let mut program = Program::default();
+                program.build(blocks, FIRST_INTERNAL_LINE_NUMBER)?;
                 program.validate(source_code)?;
                 Ok(program)
             }
@@ -59,37 +65,202 @@ impl<'a> Program<'a> {
             .map(|index| &self.blocks[*index])
     }
 
-    fn build_program(mut blocks: Vec<Block>) -> Result<Program, Error> {
-        let mut block_index = HashMap::new();
-        let mut data = Vec::new();
-        // Create index of all blocks and move out all data block into `data`
+    // TODO: Refactor to use a block_pointer and remove this function
+    fn index_last_block(&mut self) -> Result<(), Error> {
+        let line_number = self.blocks.last().unwrap().line_number();
+        let index = self.blocks.len() - 1;
+        if self.block_index.insert(line_number, index).is_some() {
+            Err(Error::DuplicateLineNumber { line_number })
+        } else {
+            Ok(())
+        }
+    }
+
+    fn build(
+        &mut self,
+        blocks: Vec<Block<'a>>,
+        mut internal_line_numer: u16,
+    ) -> Result<u16, Error> {
+        // 1. Create index of all blocks.
+        // 2. Move out all data block into `data`
         // FIXME: We could increase performance by removing data blocks from all blocks,
         // however we still need to keep index of them, since a GOTO statement could jump
-        // on a data block. For that, we most likely need to use something like skip lists.
-        for (index, block) in blocks.iter_mut().enumerate() {
+        // on a data block. Instead, we replace them with REM.
+        // 3. Flatten FOR blocks and generate equivalent code without FOR.
+        for block in blocks {
             match block {
                 Block::Line {
-                    ref mut statement, ..
+                    line_number,
+                    statement_source,
+                    statement,
+                    ..
                 } => {
                     match statement {
-                        Statement::Data(ref mut statement_data) => {
-                            data.append(statement_data);
+                        Statement::Data(mut statement_data) => {
+                            self.data.append(&mut statement_data);
+                            self.blocks.push(Block::Line {
+                                line_number,
+                                statement_source,
+                                statement: Statement::Rem,
+                            })
                         }
-                        _ => (),
+                        other_statement => self.blocks.push(Block::Line {
+                            line_number,
+                            statement_source,
+                            statement: other_statement,
+                        }),
                     };
+                    self.index_last_block()?;
                 }
-                _ => (),
-            }
-            let line_number = block.line_number();
-            if block_index.insert(line_number, index).is_some() {
-                return Err(Error::DuplicateLineNumber { line_number });
+                // Flatten FOR...NEXT by replacing FOR statement with LET preamble and
+                // IF statement, NEXT statement with GOSUB.
+                Block::For {
+                    for_line,
+                    blocks,
+                    next_line,
+                } => {
+                    // check that control variables match
+                    if for_line.for_statement.control_variable
+                        != next_line.next_statement.control_variable
+                    {
+                        return Err(Error::InvalidControlVariable {
+                            src_line_number: for_line.line_number,
+                            control_variable: format!(
+                                "{}",
+                                for_line.for_statement.control_variable
+                            ),
+                        });
+                    }
+
+                    // LET .. = limit
+                    let limit = NumericVariable::Limit {
+                        line_number: for_line.line_number,
+                    };
+                    self.blocks.push(Block::Line {
+                        line_number: internal_line_numer,
+                        statement_source: Span::new(CompleteStr("")),
+                        statement: Statement::Let(LetStatement::Numeric {
+                            variable: limit,
+                            expression: for_line.for_statement.limit,
+                        }),
+                    });
+                    internal_line_numer += 1;
+                    self.index_last_block()?;
+
+                    // LET .. = increment
+                    let increment = NumericVariable::Increment {
+                        line_number: for_line.line_number,
+                    };
+                    self.blocks.push(Block::Line {
+                        line_number: internal_line_numer,
+                        statement_source: Span::new(CompleteStr("")),
+                        statement: Statement::Let(LetStatement::Numeric {
+                            variable: increment,
+                            expression: for_line
+                                .for_statement
+                                .increment
+                                .unwrap_or(NumericExpression::with_constant(1.0)),
+                        }),
+                    });
+                    internal_line_numer += 1;
+                    self.index_last_block()?;
+
+                    // LET control_varible = initial_value
+                    self.blocks.push(Block::Line {
+                        line_number: internal_line_numer,
+                        statement_source: for_line.statement_source,
+                        statement: Statement::Let(LetStatement::Numeric {
+                            variable: for_line.for_statement.control_variable,
+                            expression: for_line.for_statement.initial_value,
+                        }),
+                    });
+                    internal_line_numer += 1;
+                    self.index_last_block()?;
+
+                    // IF (v - limit) * SGN( increment ) > 0 THEN [line after NEXT]
+                    let diff = NumericExpression {
+                        terms: vec![
+                            (
+                                Sign::Pos,
+                                Term::with_variable(for_line.for_statement.control_variable),
+                            ),
+                            (Sign::Neg, Term::with_variable(limit)),
+                        ],
+                    };
+                    let inc = NumericExpression {
+                        terms: vec![(Sign::Pos, Term::with_variable(increment))],
+                    };
+                    let sgn_inc = Function::Sgn(inc);
+                    let condition = NumericExpression {
+                        terms: vec![(
+                            Sign::Pos,
+                            Term {
+                                factor: Factor::with_expression(diff),
+                                factors: vec![(Multiplier::Mul, Factor::with_function(sgn_inc))],
+                            },
+                        )],
+                    };
+
+                    let after_next_line_number = internal_line_numer;
+                    internal_line_numer += 1;
+                    self.blocks.push(Block::Line {
+                        line_number: for_line.line_number,
+                        statement_source: for_line.statement_source,
+                        statement: Statement::IfThen(
+                            RelationalExpression::NumericComparison(
+                                condition,
+                                Relation::GreaterThan,
+                                NumericExpression::with_constant(0.0),
+                            ),
+                            after_next_line_number,
+                        ),
+                    });
+                    self.index_last_block()?;
+
+                    // add inner blocks recursively
+                    internal_line_numer = self.build(blocks, internal_line_numer)?;
+
+                    // LET control_variable = control_variable + increment
+                    self.blocks.push(Block::Line {
+                        line_number: next_line.line_number,
+                        statement_source: for_line.statement_source,
+                        statement: Statement::Let(LetStatement::Numeric {
+                            variable: for_line.for_statement.control_variable,
+                            expression: NumericExpression {
+                                terms: vec![
+                                    (
+                                        Sign::Pos,
+                                        Term::with_variable(
+                                            for_line.for_statement.control_variable,
+                                        ),
+                                    ),
+                                    (Sign::Pos, Term::with_variable(increment)),
+                                ],
+                            },
+                        }),
+                    });
+                    self.index_last_block()?;
+
+                    // GOTO [FOR line number]
+                    self.blocks.push(Block::Line {
+                        line_number: internal_line_numer,
+                        statement_source: next_line.statement_source,
+                        statement: Statement::Goto(for_line.line_number),
+                    });
+                    internal_line_numer += 1;
+                    self.index_last_block()?;
+
+                    // REM "continue after FOR block"
+                    self.blocks.push(Block::Line {
+                        line_number: after_next_line_number,
+                        statement_source: Span::new(CompleteStr("")),
+                        statement: Statement::Rem,
+                    });
+                    self.index_last_block()?;
+                }
             }
         }
-        Ok(Program {
-            blocks,
-            block_index,
-            data,
-        })
+        Ok(internal_line_numer)
     }
 
     /// Validation that can be only made after the whole program was built.
@@ -276,6 +447,8 @@ pub struct StringConstant(pub String);
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum NumericVariable {
     Simple { letter: char, digit: Option<u8> },
+    Limit { line_number: u16 },
+    Increment { line_number: u16 },
 }
 
 impl fmt::Display for NumericVariable {
@@ -288,6 +461,7 @@ impl fmt::Display for NumericVariable {
                 }
                 Ok(())
             }
+            _ => panic!("logic error: formatting internal variable"),
         }
     }
 }
@@ -327,7 +501,6 @@ impl NumericExpression {
         Self { terms: all_terms }
     }
 
-    #[cfg(test)]
     pub fn with_constant(value: f64) -> Self {
         NumericExpression::new(
             Some(if value >= 0.0 { Sign::Pos } else { Sign::Neg }),
@@ -353,6 +526,13 @@ impl Term {
     pub fn new(factor: Factor, factors: Vec<(Multiplier, Factor)>) -> Self {
         Self { factor, factors }
     }
+
+    fn with_variable(variable: NumericVariable) -> Self {
+        Self {
+            factor: Factor::with_variable(variable),
+            factors: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -365,6 +545,24 @@ impl Factor {
         let mut primaries = vec![primary];
         primaries.append(&mut factors);
         Self { primaries }
+    }
+
+    fn with_variable(variable: NumericVariable) -> Self {
+        Self {
+            primaries: vec![Primary::Variable(variable)],
+        }
+    }
+
+    fn with_expression(expression: NumericExpression) -> Self {
+        Self {
+            primaries: vec![Primary::Expression(expression)],
+        }
+    }
+
+    fn with_function(f: Function) -> Self {
+        Self {
+            primaries: vec![Primary::Function(f)],
+        }
     }
 }
 

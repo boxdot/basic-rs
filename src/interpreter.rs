@@ -253,8 +253,7 @@ impl<'a> Interpreter<'a> {
                 PrintItem::Semicolon => true,
                 PrintItem::Comma => true,
                 _ => false,
-            })
-            .unwrap_or(false);
+            }).unwrap_or(false);
         if !last_item_is_comma_or_semicolon {
             self.state.columnar_position = 0;
             write!(stdout, "\n");
@@ -533,12 +532,23 @@ impl<'a> Interpreter<'a> {
     }
 
     fn evaluate_numeric_variable(&self, variable: &NumericVariable) -> Result<f64, Error> {
-        Ok(self
-            .state
-            .numeric_values
-            .get(variable)
-            .cloned()
-            .unwrap_or(0f64))
+        match variable {
+            NumericVariable::Simple { .. } => Ok(self
+                .state
+                .numeric_values
+                .get(variable)
+                .cloned()
+                .unwrap_or(0f64)),
+            NumericVariable::Increment { line_number } | NumericVariable::Limit { line_number } => {
+                self.state
+                    .numeric_values
+                    .get(variable)
+                    .cloned()
+                    .ok_or_else(|| Error::JumpIntoFor {
+                        src_line_number: *line_number,
+                    })
+            }
+        }
     }
 
     fn evaluate_numeric_constant<W: Write>(
