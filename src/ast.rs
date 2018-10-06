@@ -40,7 +40,7 @@ impl<'a> Program<'a> {
                 let mut program = Program::default();
                 let mut builder_state = ProgramBuilderState::default();
                 program.build(blocks, &mut builder_state)?;
-                program.validate(source_code)?;
+                program.validate(&builder_state, source_code)?;
                 Ok(program)
             }
         } else {
@@ -111,6 +111,7 @@ impl<'a> Program<'a> {
                             statement: other_statement,
                         }),
                     };
+                    state.index_for_level(line_number);
                     self.index_last_block()?;
                 }
                 // Flatten FOR...NEXT by replacing FOR statement with LET preamble and
@@ -227,6 +228,7 @@ impl<'a> Program<'a> {
                             after_next_line_number,
                         ),
                     });
+                    state.index_for_level(for_line.line_number);
                     self.index_last_block()?;
 
                     // add inner blocks recursively
@@ -239,7 +241,7 @@ impl<'a> Program<'a> {
                     // LET control_variable = control_variable + increment
                     self.blocks.push(Block::Line {
                         line_number: next_line.line_number,
-                        statement_source: for_line.statement_source,
+                        statement_source: next_line.statement_source,
                         statement: Statement::Let(LetStatement::Numeric {
                             variable: for_line.for_statement.control_variable,
                             expression: NumericExpression {
@@ -255,6 +257,7 @@ impl<'a> Program<'a> {
                             },
                         }),
                     });
+                    state.index_for_level(next_line.line_number);
                     self.index_last_block()?;
 
                     // GOTO [FOR line number]
@@ -283,24 +286,12 @@ impl<'a> Program<'a> {
     /// Validations:
     ///
     /// * Check for valid line numbers in statements refering such.
-    fn validate(&self, source_code: &str) -> Result<(), Error> {
-        let check_valid_line_number = |ref_line_number, line_number, statement_source: &Span| {
-            if self.block_index.get(&ref_line_number).is_none() {
-                Err(Error::UndefinedLineNumber {
-                    src_line_number: line_number,
-                    line_number: ref_line_number,
-                    statement_source: source_code[statement_source.offset..]
-                        .lines()
-                        .next()
-                        .unwrap()
-                        .into(),
-                })
-            } else {
-                Ok(())
-            }
-        };
-
-        // check for invalid line label
+    /// * Check for jumping into a FOR block
+    fn validate(
+        &self,
+        builder_state: &ProgramBuilderState,
+        source_code: &str,
+    ) -> Result<(), Error> {
         for block in &self.blocks {
             match block {
                 Block::Line {
@@ -309,13 +300,45 @@ impl<'a> Program<'a> {
                     statement_source,
                 } => match statement {
                     Statement::Goto(ref_line_number) => {
-                        check_valid_line_number(*ref_line_number, *line_number, statement_source)?;
+                        // check for defined line number
+                        if self.block_index.get(&ref_line_number).is_none() {
+                            return Err(Error::UndefinedLineNumber {
+                                src_line_number: *line_number,
+                                line_number: *ref_line_number,
+                                statement_source: source_code[statement_source.offset..]
+                                    .lines()
+                                    .next()
+                                    .unwrap()
+                                    .into(),
+                            });
+                        }
+                        // check jumps into FOR (for non-generated jumps)
+                        // Note: jumping out of a FOR..NEXT block is fine
+                        if *line_number < FIRST_INTERNAL_LINE_NUMBER
+                            && *ref_line_number < FIRST_INTERNAL_LINE_NUMBER
+                        {
+                            let current_level = builder_state.for_levels.get(line_number);
+                            let ref_level = builder_state.for_levels.get(ref_line_number);
+                            if current_level < ref_level {
+                                return Err(Error::JumpIntoFor {
+                                    src_line_number: *line_number,
+                                });
+                            }
+                        }
                     }
-                    Statement::IfThen(_, ref_line_number) => {
-                        check_valid_line_number(*ref_line_number, *line_number, statement_source)?;
-                    }
-                    Statement::Gosub(ref_line_number) => {
-                        check_valid_line_number(*ref_line_number, *line_number, statement_source)?;
+                    Statement::IfThen(_, ref_line_number) | Statement::Gosub(ref_line_number) => {
+                        // check for defined line number
+                        if self.block_index.get(&ref_line_number).is_none() {
+                            return Err(Error::UndefinedLineNumber {
+                                src_line_number: *line_number,
+                                line_number: *ref_line_number,
+                                statement_source: source_code[statement_source.offset..]
+                                    .lines()
+                                    .next()
+                                    .unwrap()
+                                    .into(),
+                            });
+                        }
                     }
                     _ => (),
                 },
@@ -330,6 +353,8 @@ impl<'a> Program<'a> {
 struct ProgramBuilderState {
     internal_line_numer: u16,
     for_control_variables_stack: HashMap<NumericVariable, u16 /* line number */>,
+    /// FOR deepness level for each line
+    for_levels: HashMap<u16 /* line number */, usize>,
 }
 
 impl Default for ProgramBuilderState {
@@ -337,6 +362,7 @@ impl Default for ProgramBuilderState {
         Self {
             internal_line_numer: FIRST_INTERNAL_LINE_NUMBER,
             for_control_variables_stack: HashMap::new(),
+            for_levels: HashMap::new(),
         }
     }
 }
@@ -346,6 +372,11 @@ impl ProgramBuilderState {
         let next = self.internal_line_numer;
         self.internal_line_numer += 1;
         next
+    }
+
+    fn index_for_level(&mut self, line_number: u16) {
+        self.for_levels
+            .insert(line_number, self.for_control_variables_stack.len());
     }
 }
 
