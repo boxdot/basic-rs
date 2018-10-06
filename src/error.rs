@@ -26,7 +26,7 @@ pub enum Error {
         line_number: u16,
         statement_source: String,
     },
-    UnexpectedReturn {
+    StackUnderflow {
         src_line_number: u16,
     },
     FracPowOfNegValue {
@@ -114,8 +114,8 @@ impl fmt::Display for Error {
                     cursor = line_number_position
                 )
             }
-            Error::UnexpectedReturn { src_line_number } => {
-                write!(f, "{}: error: unexpected return\n", src_line_number)
+            Error::StackUnderflow { src_line_number } => {
+                write!(f, "{}: error: stack underflow \n", src_line_number)
             }
             Error::FracPowOfNegValue {
                 src_line_number,
