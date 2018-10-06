@@ -510,7 +510,7 @@ named!(for_line<Span, ForLine>,
         })
     ));
 
-named!(next_line<Span, NextLine>,
+named!(pub next_line<Span, NextLine>,
     do_parse!(
         line_number: line_number >>
         space >>
