@@ -122,7 +122,7 @@ impl<'a> Interpreter<'a> {
                         .state
                         .stack
                         .pop()
-                        .ok_or_else(|| Error::UnexpectedReturn { src_line_number })?;
+                        .ok_or_else(|| Error::StackUnderflow { src_line_number })?;
                     let prev_block = self
                         .program
                         .get_block_by_line_number(prev_line_number)
