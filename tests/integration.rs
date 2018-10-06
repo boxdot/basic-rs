@@ -176,7 +176,7 @@ test_program!(P040);
 test_program!(P041);
 test_program!(P042);
 test_program!(P043);
-try_test_program!(P044);
+test_program!(P044);
 test_program!(P045);
 test_program!(P046);
 test_program!(P047);
