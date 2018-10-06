@@ -124,10 +124,10 @@ impl<'a> Program<'a> {
                         != next_line.next_statement.control_variable
                     {
                         return Err(Error::InvalidControlVariable {
-                            src_line_number: for_line.line_number,
+                            src_line_number: next_line.line_number,
                             control_variable: format!(
                                 "{}",
-                                for_line.for_statement.control_variable
+                                next_line.next_statement.control_variable
                             ),
                         });
                     }
