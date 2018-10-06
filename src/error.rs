@@ -50,6 +50,10 @@ pub enum Error {
         src_line_number: u16,
         control_variable: String,
     },
+    ControlVariableReuse {
+        src_line_number: u16,
+        outer_line_number: u16,
+    },
     JumpIntoFor {
         src_line_number: u16,
     },
@@ -149,6 +153,14 @@ impl fmt::Display for Error {
                 f,
                 "{}: error: invalid control variable {}\n",
                 src_line_number, control_variable
+            ),
+            Error::ControlVariableReuse {
+                src_line_number,
+                outer_line_number,
+            } => write!(
+                f,
+                "{}: error: FOR uses the same variable as outer FOR at line {}\n",
+                src_line_number, outer_line_number
             ),
             Error::JumpIntoFor { src_line_number } => {
                 write!(f, "{}: error: jump into FOR block \n", src_line_number)

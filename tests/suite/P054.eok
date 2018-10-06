@@ -1,3 +1,1 @@
 280: error: FOR uses the same variable as outer FOR at line 260
- FOR I=3 TO 5
-     ^

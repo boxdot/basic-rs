@@ -38,7 +38,8 @@ impl<'a> Program<'a> {
                 })
             } else {
                 let mut program = Program::default();
-                program.build(blocks, FIRST_INTERNAL_LINE_NUMBER)?;
+                let mut builder_state = ProgramBuilderState::default();
+                program.build(blocks, &mut builder_state)?;
                 program.validate(source_code)?;
                 Ok(program)
             }
@@ -79,8 +80,8 @@ impl<'a> Program<'a> {
     fn build(
         &mut self,
         blocks: Vec<Block<'a>>,
-        mut internal_line_numer: u16,
-    ) -> Result<u16, Error> {
+        state: &mut ProgramBuilderState,
+    ) -> Result<(), Error> {
         // 1. Create index of all blocks.
         // 2. Move out all data block into `data`
         // FIXME: We could increase performance by removing data blocks from all blocks,
@@ -119,7 +120,7 @@ impl<'a> Program<'a> {
                     blocks,
                     next_line,
                 } => {
-                    // check that control variables match
+                    // check that control variables matches in FOR and NEXT
                     if for_line.for_statement.control_variable
                         != next_line.next_statement.control_variable
                     {
@@ -131,20 +132,34 @@ impl<'a> Program<'a> {
                             ),
                         });
                     }
+                    // check that control variable is not used in a parent FOR..NEXT
+                    if let Some(outer_line_number) = state
+                        .for_control_variables_stack
+                        .get(&for_line.for_statement.control_variable)
+                        .cloned()
+                    {
+                        return Err(Error::ControlVariableReuse {
+                            src_line_number: for_line.line_number,
+                            outer_line_number,
+                        });
+                    }
+                    state.for_control_variables_stack.insert(
+                        for_line.for_statement.control_variable,
+                        for_line.line_number,
+                    );
 
                     // LET .. = limit
                     let limit = NumericVariable::Limit {
                         line_number: for_line.line_number,
                     };
                     self.blocks.push(Block::Line {
-                        line_number: internal_line_numer,
+                        line_number: state.next_internal_line_number(),
                         statement_source: Span::new(CompleteStr("")),
                         statement: Statement::Let(LetStatement::Numeric {
                             variable: limit,
                             expression: for_line.for_statement.limit,
                         }),
                     });
-                    internal_line_numer += 1;
                     self.index_last_block()?;
 
                     // LET .. = increment
@@ -152,7 +167,7 @@ impl<'a> Program<'a> {
                         line_number: for_line.line_number,
                     };
                     self.blocks.push(Block::Line {
-                        line_number: internal_line_numer,
+                        line_number: state.next_internal_line_number(),
                         statement_source: Span::new(CompleteStr("")),
                         statement: Statement::Let(LetStatement::Numeric {
                             variable: increment,
@@ -162,19 +177,17 @@ impl<'a> Program<'a> {
                                 .unwrap_or(NumericExpression::with_constant(1.0)),
                         }),
                     });
-                    internal_line_numer += 1;
                     self.index_last_block()?;
 
                     // LET control_varible = initial_value
                     self.blocks.push(Block::Line {
-                        line_number: internal_line_numer,
+                        line_number: state.next_internal_line_number(),
                         statement_source: for_line.statement_source,
                         statement: Statement::Let(LetStatement::Numeric {
                             variable: for_line.for_statement.control_variable,
                             expression: for_line.for_statement.initial_value,
                         }),
                     });
-                    internal_line_numer += 1;
                     self.index_last_block()?;
 
                     // IF (v - limit) * SGN( increment ) > 0 THEN [line after NEXT]
@@ -201,8 +214,7 @@ impl<'a> Program<'a> {
                         )],
                     };
 
-                    let after_next_line_number = internal_line_numer;
-                    internal_line_numer += 1;
+                    let after_next_line_number = state.next_internal_line_number();
                     self.blocks.push(Block::Line {
                         line_number: for_line.line_number,
                         statement_source: for_line.statement_source,
@@ -218,7 +230,11 @@ impl<'a> Program<'a> {
                     self.index_last_block()?;
 
                     // add inner blocks recursively
-                    internal_line_numer = self.build(blocks, internal_line_numer)?;
+                    self.build(blocks, state)?;
+
+                    state
+                        .for_control_variables_stack
+                        .remove(&for_line.for_statement.control_variable);
 
                     // LET control_variable = control_variable + increment
                     self.blocks.push(Block::Line {
@@ -243,11 +259,10 @@ impl<'a> Program<'a> {
 
                     // GOTO [FOR line number]
                     self.blocks.push(Block::Line {
-                        line_number: internal_line_numer,
+                        line_number: state.next_internal_line_number(),
                         statement_source: next_line.statement_source,
                         statement: Statement::Goto(for_line.line_number),
                     });
-                    internal_line_numer += 1;
                     self.index_last_block()?;
 
                     // REM "continue after FOR block"
@@ -260,7 +275,7 @@ impl<'a> Program<'a> {
                 }
             }
         }
-        Ok(internal_line_numer)
+        Ok(())
     }
 
     /// Validation that can be only made after the whole program was built.
@@ -308,6 +323,29 @@ impl<'a> Program<'a> {
             }
         }
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct ProgramBuilderState {
+    internal_line_numer: u16,
+    for_control_variables_stack: HashMap<NumericVariable, u16 /* line number */>,
+}
+
+impl Default for ProgramBuilderState {
+    fn default() -> Self {
+        Self {
+            internal_line_numer: FIRST_INTERNAL_LINE_NUMBER,
+            for_control_variables_stack: HashMap::new(),
+        }
+    }
+}
+
+impl ProgramBuilderState {
+    fn next_internal_line_number(&mut self) -> u16 {
+        let next = self.internal_line_numer;
+        self.internal_line_numer += 1;
+        next
     }
 }
 
