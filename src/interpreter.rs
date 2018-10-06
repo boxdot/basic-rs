@@ -367,7 +367,7 @@ impl<'a> Interpreter<'a> {
                 .program
                 .data
                 .get(self.state.data_pointer as usize)
-                .ok_or_else(|| Error::MissingData {
+                .ok_or_else(|| Error::InsufficientData {
                     src_line_number: self.state.current_line_number,
                 })?;
             match (variable, datum) {

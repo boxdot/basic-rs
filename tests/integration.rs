@@ -229,7 +229,7 @@ try_test_program!(P093);
 try_test_program!(P094);
 test_program!(P095);
 test_program!(P096);
-try_test_program!(P097);
+test_program!(P097);
 try_test_program!(P098);
 try_test_program!(P099);
 test_program!(P100);

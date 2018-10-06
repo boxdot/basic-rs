@@ -34,7 +34,7 @@ pub enum Error {
         value: f64,
         exp: f64,
     },
-    MissingData {
+    InsufficientData {
         src_line_number: u16,
     },
     ReadDatatypeMismatch {
@@ -126,9 +126,11 @@ impl fmt::Display for Error {
                 "{}: error: negative value raised to non-integral value ({} ^ {})\n",
                 src_line_number, value, exp
             ),
-            Error::MissingData { src_line_number } => {
-                write!(f, "{}: error: missing data\n", src_line_number)
-            }
+            Error::InsufficientData { src_line_number } => write!(
+                f,
+                "{}: error: insufficient data for READ \n",
+                src_line_number
+            ),
             Error::ReadDatatypeMismatch {
                 src_line_number,
                 data_pointer,
