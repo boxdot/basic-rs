@@ -51,6 +51,9 @@ pub enum Error {
     JumpIntoFor {
         src_line_number: u16,
     },
+    IndexOutOfRange {
+        src_line_number: u16,
+    },
 }
 
 impl<'a> convert::From<nom::Err<Span<'a>>> for Error {
@@ -147,6 +150,9 @@ impl fmt::Display for Error {
             ),
             Error::JumpIntoFor { src_line_number } => {
                 write!(f, "{}: error: jump into FOR block \n", src_line_number)
+            }
+            Error::IndexOutOfRange { src_line_number } => {
+                write!(f, "{}: error: index out of range \n", src_line_number)
             }
         }
     }

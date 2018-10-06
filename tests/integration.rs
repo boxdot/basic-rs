@@ -57,7 +57,7 @@ fn run_and_compare_output(program: &str, expected_output: &str, expected_err_out
     }
 
     if program.find("THIS TEST IS INFORMATIVE ONLY").is_some() {
-        assert!(output.find("INFORMATIVE TEST PASSED").is_some());
+        assert!(output.find("FAILED").is_none());
     } else {
         assert_eq!(
             output,
@@ -159,7 +159,7 @@ test_program!(P023);
 test_program!(P024);
 test_program!(P025);
 test_program!(P026);
-try_test_program!(P027);
+test_program!(P027);
 test_program!(P028);
 test_program!(P029);
 test_program!(P030);
@@ -220,9 +220,9 @@ try_test_program!(P084);
 try_test_program!(P085);
 try_test_program!(P086);
 test_program!(P087);
-try_test_program!(P088);
-try_test_program!(P089);
-try_test_program!(P090);
+test_program!(P088);
+test_program!(P089);
+test_program!(P090);
 try_test_program!(P091);
 try_test_program!(P092);
 try_test_program!(P093);
@@ -311,8 +311,8 @@ try_test_program!(P175);
 test_program!(P176);
 try_test_program!(P177);
 try_test_program!(P178);
-try_test_program!(P179);
-try_test_program!(P180);
+test_program!(P179);
+test_program!(P180);
 try_test_program!(P181);
 try_test_program!(P182);
 try_test_program!(P183);

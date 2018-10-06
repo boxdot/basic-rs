@@ -157,6 +157,7 @@ impl<'a> Interpreter<'a> {
             }
             Statement::Goto(line_number) => Action::Goto(*line_number),
             Statement::Gosub(line_number) => Action::Gosub(*line_number),
+            Statement::OnGoto(statement) => Action::Goto(self.evaluate_on_goto(statement, stderr)?),
             Statement::IfThen(if_statement, line_number) => {
                 if self.evaluate_if(if_statement, stderr)? {
                     Action::Goto(*line_number)
@@ -572,6 +573,23 @@ impl<'a> Interpreter<'a> {
             self.warn_with_cursor(stderr, "numeric constant overflow ", span.offset);
         }
         Ok(c)
+    }
+
+    fn evaluate_on_goto<W: Write>(
+        &mut self,
+        statement: &OnGotoStatement,
+        stderr: &mut W,
+    ) -> Result<u16, Error> {
+        let result_index = self
+            .evaluate_numeric_expression(&statement.numeric_expression, stderr)?
+            .round() as usize;
+        if result_index < 1 || result_index > statement.line_numbers.len() {
+            Err(Error::IndexOutOfRange {
+                src_line_number: self.state.current_line_number,
+            })
+        } else {
+            Ok(statement.line_numbers[result_index - 1])
+        }
     }
 
     // Helper functions

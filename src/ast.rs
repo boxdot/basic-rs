@@ -360,6 +360,7 @@ pub enum Statement {
     Let(LetStatement),
     Goto(u16),
     Gosub(u16),
+    OnGoto(OnGotoStatement),
     IfThen(RelationalExpression, u16),
     Read(Vec<Variable>),
     Data(Vec<Constant>),
@@ -381,6 +382,12 @@ pub struct ForStatement {
 #[derive(Debug, PartialEq)]
 pub struct NextStatement {
     pub control_variable: NumericVariable,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct OnGotoStatement {
+    pub numeric_expression: NumericExpression,
+    pub line_numbers: Vec<u16>,
 }
 
 // 6. Constants
