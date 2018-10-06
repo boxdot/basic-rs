@@ -17,6 +17,7 @@ pub type Span<'a> = LocatedSpan<CompleteStr<'a>>;
 /// when parser fails.
 pub enum ErrorCode {
     ExpectedStringExpression,
+    ForWithoutNext,
     Unknown,
 }
 
@@ -24,6 +25,7 @@ impl From<u32> for ErrorCode {
     fn from(code: u32) -> Self {
         match code {
             0 => ErrorCode::ExpectedStringExpression,
+            1 => ErrorCode::ForWithoutNext,
             _ => ErrorCode::Unknown,
         }
     }
@@ -33,6 +35,7 @@ impl fmt::Display for ErrorCode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ErrorCode::ExpectedStringExpression => f.write_str("string expression expected"),
+            ErrorCode::ForWithoutNext => f.write_str("FOR without NEXT"),
             ErrorCode::Unknown => f.write_str("unknown"),
         }
     }
@@ -40,24 +43,38 @@ impl fmt::Display for ErrorCode {
 
 impl ErrorCode {
     /// Converts error code to BASIC conform error output.
-    ///
-    /// # Arguments
-    ///
-    /// `line` - Full line string where the error happened.
-    /// `remaining` - Remaining statement which could not be parsed. Must be a substring of `line`.
-    pub fn to_string(&self, line: &str, remaining: &str) -> Option<String> {
-        let mut parts = line.trim().splitn(2, ' ');
-        let line_number = parts.next()?;
-        let statement = parts.next()?;
-        let pos = statement.find(remaining)?;
-        Some(format!(
-            "{}: error: {} \n {}\n{:width$}^\n",
-            line_number,
-            self,
-            statement,
-            "",
-            width = pos + 1
-        ))
+    pub fn to_string(&self, span: &Span, input: &str) -> String {
+        match self {
+            ErrorCode::ExpectedStringExpression => {
+                let line = input.lines().nth(span.line as usize - 1).unwrap();
+                let mut parts = line.trim().splitn(2, ' ');
+                let line_number = parts.next().unwrap();
+                let statement = parts.next().unwrap();
+                let remaining = span.fragment.lines().next().unwrap();
+                let pos = statement.find(remaining).unwrap();
+                format!(
+                    "{}: error: {} \n {}\n{:width$}^\n",
+                    line_number,
+                    self,
+                    statement,
+                    "",
+                    width = pos + 1
+                )
+            }
+            ErrorCode::ForWithoutNext => {
+                // span does not give a good context here, we need to find the first
+                // FOR block by going through lines backwards
+                let lines: Vec<_> = input.lines().collect();
+                let for_line_str = lines[0..span.line as usize - 1]
+                    .iter()
+                    .rev()
+                    .find(|l| l.find("FOR").is_some())
+                    .unwrap();
+                let (_, for_line) = for_line(Span::new(CompleteStr(for_line_str))).unwrap();
+                format!("{}: error: {} \n", for_line.line_number, self)
+            }
+            ErrorCode::Unknown => panic!("bug in parser"),
+        }
     }
 }
 
@@ -474,7 +491,7 @@ named!(for_block<Span, Block>,
 named!(for_body<Span, (Vec<Block>, NextLine)>,
     do_parse!(
         blocks: many0!(block) >>
-        next_line: next_line >>
+        next_line: return_error!(ErrorKind::Custom(ErrorCode::ForWithoutNext as u32), next_line) >>
         ((blocks, next_line))
     ));
 
