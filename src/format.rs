@@ -49,7 +49,6 @@ pub fn format_float(value: f64) -> String {
             && integ.len() + fract.len().max(extrad_int.abs() as usize) <= SIGNIFICANCE_WIDTH
         {
             // special case: we shall omit E by moving comma to the right
-
             let n_shift = extrad_int.abs() as usize;
             let integ: String = integ
                 .chars()
@@ -75,7 +74,8 @@ pub fn format_float(value: f64) -> String {
             let full_stop = if !fract.is_empty() { "." } else { "" };
             format!("{}{}{}{} ", sign_str, integ, full_stop, fract)
         } else if extrad_int == 0 {
-            format!("{}{}.{} ", sign_str, integ, fract)
+            let full_stop = if !fract.is_empty() { "." } else { "" };
+            format!("{}{}{}{} ", sign_str, integ, full_stop, fract)
         } else {
             format!("{}{}.{}E{}{} ", sign_str, integ, fract, extrad_sign, extrad)
         }
