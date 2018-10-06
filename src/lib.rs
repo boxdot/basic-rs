@@ -38,10 +38,7 @@ pub fn execute<W: Write, V: Write>(
             }
         }
         Err(nom::Err::Failure(Context::Code(span, nom::ErrorKind::Custom(err_code)))) => {
-            let line = input.lines().nth(span.line as usize - 1).unwrap();
-            let err_output = parser::ErrorCode::from(err_code)
-                .to_string(line, &span.fragment.lines().next().unwrap())
-                .unwrap_or_else(|| format!("{}", err_code));
+            let err_output = parser::ErrorCode::from(err_code).to_string(&span, input);
             write!(stderr, "{}", err_output);
             Ok(())
         }
