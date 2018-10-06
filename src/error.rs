@@ -1,7 +1,9 @@
 use nom;
 use nom::simple_errors::Context;
+use nom::types::CompleteStr;
 
-use parser::Span;
+use ast::NextLine;
+use parser::{self, Span};
 
 use std::convert;
 use std::fmt;
@@ -156,4 +158,35 @@ impl fmt::Display for Error {
             }
         }
     }
+}
+
+pub fn format_remaining<'a>(remaining: &'a str) -> Result<String, Error> {
+    let failed_line = remaining.lines().next().unwrap();
+    let failed_span = Span::new(CompleteStr(failed_line));
+
+    // special case: unexpected NEXT statement => no corresponding FOR block
+    if let Ok((_, NextLine { line_number, .. })) = parser::next_line(failed_span) {
+        return Ok(format!("{}: error: NEXT without FOR \n", line_number));
+    }
+
+    // general case
+    // extract fragment where the parser failed from all possible errors
+    let failed_fragment = match parser::line(failed_span) {
+        Ok((span, _)) => span.fragment,
+        Err(nom::Err::Error(Context::Code(span, _))) => span.fragment,
+        Err(nom::Err::Failure(Context::Code(span, _))) => span.fragment,
+        Err(e) => return Err(Error::from(e)),
+    };
+
+    let mut parts = failed_line.splitn(2, ' ');
+    let line_number = parts.next().unwrap();
+    let statement = parts.next().unwrap();
+    let failed_pos = statement.find(failed_fragment.as_ref()).unwrap_or(0);
+    Ok(format!(
+        "{}: error: syntax error \n {}\n {:cursor$}^\n",
+        line_number,
+        statement,
+        "",
+        cursor = failed_pos + 1
+    ))
 }

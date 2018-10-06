@@ -28,7 +28,7 @@ pub fn execute<W: Write, V: Write>(
     match res {
         Ok((remaining, ast)) => {
             if !remaining.fragment.is_empty() {
-                write!(stderr, "{}", syntax_error_with_cursor(&remaining.fragment)?);
+                write!(stderr, "{}", error::format_remaining(&remaining.fragment)?);
                 Ok(())
             } else {
                 let ast = ast?;
@@ -44,29 +44,4 @@ pub fn execute<W: Write, V: Write>(
         }
         Err(e) => Err(Error::Parser(format!("parser error: {}", e))),
     }
-}
-
-fn syntax_error_with_cursor<'a>(remaining: &'a str) -> Result<String, Error> {
-    let failed_line = remaining.lines().next().unwrap();
-    let failed_span = parser::Span::new(CompleteStr(failed_line));
-
-    // extract fragment where the parser failed from all possible errors
-    let failed_fragment = match parser::line(failed_span) {
-        Ok((span, _)) => span.fragment,
-        Err(nom::Err::Error(Context::Code(span, _))) => span.fragment,
-        Err(nom::Err::Failure(Context::Code(span, _))) => span.fragment,
-        Err(e) => return Err(Error::from(e)),
-    };
-
-    let mut parts = failed_line.splitn(2, ' ');
-    let line_number = parts.next().unwrap();
-    let statement = parts.next().unwrap();
-    let failed_pos = statement.find(failed_fragment.as_ref()).unwrap_or(0);
-    Ok(format!(
-        "{}: error: syntax error \n {}\n {:cursor$}^\n",
-        line_number,
-        statement,
-        "",
-        cursor = failed_pos + 1
-    ))
 }
