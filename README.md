@@ -4,7 +4,7 @@ Implementation of BASIC interpreter in Rust. The implementation follows the [ECM
 
 This project is **WIP**:
 
-![test coverage](https://img.shields.io/badge/style-88%2F212%20tests-blue.svg?longCache=true&label=Minimal%20basic%20test%20coverage)
+![test coverage](https://img.shields.io/badge/style-89%2F212%20tests-blue.svg?longCache=true&label=Minimal%20basic%20test%20coverage)
 
 1. Pick any tests marked with `try_test_program` in [tests/integration.rs](tests/integration.rs).
 2. Change the test to use the `test_program` macro.
