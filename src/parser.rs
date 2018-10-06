@@ -136,6 +136,7 @@ named!(statement<Span, Statement>,
     alt!(
         goto_statement |
         gosub_statement |
+        on_goto_statement |
         if_then_statement |
         let_statement |
         print_statement |
@@ -434,6 +435,21 @@ named!(return_statement<Span, Statement>,
     do_parse!(
         tag!("RETURN") >>
         (Statement::Return)
+    ));
+
+named!(on_goto_statement<Span, Statement>,
+    do_parse!(
+        tag!("ON") >>
+        space >>
+        numeric_expression: numeric_expression >>
+        space >>
+        tag!("GO") >>
+        space0 >>
+        tag!("TO") >>
+        space >>
+        line_numbers: separated_nonempty_list!(
+            delimited!(space0, char!(','), space0), line_number) >>
+        (Statement::OnGoto(OnGotoStatement { numeric_expression, line_numbers }))
     ));
 
 named!(stop_statement<Span, Statement>,

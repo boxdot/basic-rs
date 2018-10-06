@@ -64,7 +64,7 @@ fn syntax_error_with_cursor<'a>(remaining: &'a str) -> Result<String, Error> {
     let mut parts = failed_line.splitn(2, ' ');
     let line_number = parts.next().unwrap();
     let statement = parts.next().unwrap();
-    let failed_pos = statement.find(failed_fragment.as_ref()).unwrap();
+    let failed_pos = statement.find(failed_fragment.as_ref()).unwrap_or(0);
     Ok(format!(
         "{}: error: syntax error \n {}\n {:cursor$}^\n",
         line_number,
