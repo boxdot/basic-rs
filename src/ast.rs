@@ -292,6 +292,23 @@ impl<'a> Program<'a> {
         builder_state: &ProgramBuilderState,
         source_code: &str,
     ) -> Result<(), Error> {
+        // check for defined line number
+        let check_line_number = |ref_line_number, line_number, statement_source: &Span| {
+            if self.block_index.get(&ref_line_number).is_none() {
+                Err(Error::UndefinedLineNumber {
+                    src_line_number: line_number,
+                    line_number: ref_line_number,
+                    statement_source: source_code[statement_source.offset..]
+                        .lines()
+                        .next()
+                        .unwrap()
+                        .into(),
+                })
+            } else {
+                Ok(())
+            }
+        };
+
         for block in &self.blocks {
             match block {
                 Block::Line {
@@ -300,18 +317,8 @@ impl<'a> Program<'a> {
                     statement_source,
                 } => match statement {
                     Statement::Goto(ref_line_number) => {
-                        // check for defined line number
-                        if self.block_index.get(&ref_line_number).is_none() {
-                            return Err(Error::UndefinedLineNumber {
-                                src_line_number: *line_number,
-                                line_number: *ref_line_number,
-                                statement_source: source_code[statement_source.offset..]
-                                    .lines()
-                                    .next()
-                                    .unwrap()
-                                    .into(),
-                            });
-                        }
+                        check_line_number(*ref_line_number, *line_number, statement_source)?;
+
                         // check jumps into FOR (for non-generated jumps)
                         // Note: jumping out of a FOR..NEXT block is fine
                         if *line_number < FIRST_INTERNAL_LINE_NUMBER
@@ -327,17 +334,11 @@ impl<'a> Program<'a> {
                         }
                     }
                     Statement::IfThen(_, ref_line_number) | Statement::Gosub(ref_line_number) => {
-                        // check for defined line number
-                        if self.block_index.get(&ref_line_number).is_none() {
-                            return Err(Error::UndefinedLineNumber {
-                                src_line_number: *line_number,
-                                line_number: *ref_line_number,
-                                statement_source: source_code[statement_source.offset..]
-                                    .lines()
-                                    .next()
-                                    .unwrap()
-                                    .into(),
-                            });
+                        check_line_number(*ref_line_number, *line_number, statement_source)?;
+                    }
+                    Statement::OnGoto(OnGotoStatement { line_numbers, .. }) => {
+                        for ref_line_number in line_numbers {
+                            check_line_number(*ref_line_number, *line_number, statement_source)?;
                         }
                     }
                     _ => (),
