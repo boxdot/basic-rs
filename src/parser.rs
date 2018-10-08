@@ -244,13 +244,35 @@ named!(variable<Span, Variable>,
     ));
 
 named!(numeric_variable<Span, NumericVariable>,
-    alt!(simple_numeric_variable));
+    alt!(
+        map!(numeric_array_element, NumericVariable::Array) |
+        map!(simple_numeric_variable, NumericVariable::Simple)
+    ));
 
-named!(simple_numeric_variable<Span, NumericVariable>,
+named!(simple_numeric_variable<Span, SimpleNumericVariable>,
     do_parse!(
         letter: letter >>
         digit: opt!(digit) >>
-        (NumericVariable::Simple { letter, digit })
+        (SimpleNumericVariable { letter, digit })
+    ));
+
+named!(numeric_array_element<Span, ArrayVariable>,
+    do_parse!(
+        numeric_array_name: letter >>
+        subscript: subscript >>
+        (ArrayVariable {
+            letter: numeric_array_name,
+            subscript,
+        })
+    ));
+
+named!(subscript<Span, (NumericExpression, Option<NumericExpression>)>,
+    do_parse!(
+        char!('(') >>
+        subscript1: numeric_expression >>
+        subscript2: opt!(preceded!(char!(','), numeric_expression)) >>
+        char!(')') >>
+        ((subscript1, subscript2))
     ));
 
 named!(string_variable<Span, StringVariable>,
