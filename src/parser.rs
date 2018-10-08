@@ -168,7 +168,7 @@ named!(statement<Span, Statement>,
 
 // 6. Constants
 
-named!(numeric_constant<Span, NumericConstant>,
+named!(pub numeric_constant<Span, NumericConstant>,
     do_parse!(
         sign: opt!(sign) >>
         space0 >>
@@ -620,16 +620,12 @@ named!(data_statement<Span, Statement>,
         (Statement::Data(data))
     ));
 
-named!(data_list<Span, Vec<Constant>>,
+named!(data_list<Span, Vec<StringConstant>>,
     separated_nonempty_list!(
         delimited!(space0, char!(','), space0), datum));
 
-named!(datum<Span, Constant>,
-    alt!(
-        map!(numeric_constant, Constant::Numeric) |
-        unquoted_string => { |s| Constant::String(StringConstant(s)) } |
-        map!(string_constant, Constant::String)
-    ));
+named!(datum<Span, StringConstant>,
+    alt!(map!(unquoted_string, StringConstant) | string_constant));
 
 // 19. REMARK statement
 
@@ -739,7 +735,7 @@ mod tests {
 
     #[test]
     fn test_data() {
-        let res = data_statement(Span::new(CompleteStr("DATA 7,8,9,10")));
+        let res = data_statement(Span::new(CompleteStr("DATA 5,6,2D3")));
         let (remaining, _value) = res.expect("failed to parse");
         let remaining = remaining.fragment;
         assert!(remaining.is_empty(), "Remaing is not empty: {}", remaining);

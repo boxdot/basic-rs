@@ -14,7 +14,7 @@ const FIRST_INTERNAL_LINE_NUMBER: u16 = 10001;
 pub struct Program<'a> {
     pub blocks: Vec<Block<'a>>,
     block_index: HashMap<u16, usize>,
-    pub data: Vec<Constant>,
+    pub data: Vec<StringConstant>,
 }
 
 impl<'a> Program<'a> {
@@ -433,7 +433,7 @@ pub enum Statement {
     OnGoto(OnGotoStatement),
     IfThen(RelationalExpression, u16),
     Read(Vec<Variable>),
-    Data(Vec<Constant>),
+    Data(Vec<StringConstant>),
     Restore,
     Rem,
     Return,
@@ -461,12 +461,6 @@ pub struct OnGotoStatement {
 }
 
 // 6. Constants
-
-#[derive(Debug, PartialEq)]
-pub enum Constant {
-    Numeric(NumericConstant),
-    String(StringConstant),
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sign {
