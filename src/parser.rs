@@ -167,7 +167,8 @@ named!(statement<Span, Statement>,
         restore_statement |
         data_statement |
         remark_statement |
-        end_statement
+        end_statement |
+        dimension_statement
     ));
 
 // 6. Constants
@@ -635,6 +636,29 @@ named!(data_list<Span, Vec<StringConstant>>,
 
 named!(datum<Span, StringConstant>,
     alt!(map!(unquoted_string, StringConstant) | string_constant));
+
+// 18. ARRAY declarations
+
+named!(dimension_statement<Span, Statement>,
+    do_parse!(
+        tag!("DIM") >>
+        space >>
+        array_declarations: separated_nonempty_list!(
+            delimited!(space0, char!(','), space0), array_declaration) >>
+        (Statement::Dim(array_declarations))
+    ));
+
+named!(array_declaration<Span, ArrayDeclaration>,
+    do_parse!(
+        letter: letter >>
+        char!('(') >>
+        bounds: bounds >>
+        char!(')') >>
+        (ArrayDeclaration{ letter, bounds })
+    ));
+
+named!(bounds<Span, (u64, Option<u64>)>,
+    pair!(integer, opt!(preceded!(char!(','), integer))));
 
 // 19. REMARK statement
 

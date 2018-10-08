@@ -179,6 +179,7 @@ impl<'a> Interpreter<'a> {
             Statement::Return => Action::Return,
             Statement::Stop => Action::Stop,
             Statement::End => Action::Stop,
+            Statement::Dim(_) => unimplemented!(),
         };
         Ok(res)
     }
