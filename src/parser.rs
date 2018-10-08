@@ -107,7 +107,11 @@ named!(plain_string_character<Span, char>,
 
 named!(unquoted_string<Span, String>,
     map!(many1!(unquoted_string_character), {
-        |chars: Vec<char>| chars.into_iter().collect::<String>()}));
+        |chars: Vec<char>| {
+            let s = chars.into_iter().collect::<String>();
+            String::from(s.trim())
+        }
+    }));
 
 // 5. Programs
 
