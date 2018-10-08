@@ -121,10 +121,9 @@ impl<'a> Program<'a> {
                     blocks,
                     next_line,
                 } => {
+                    let control_variable = for_line.for_statement.control_variable;
                     // check that control variables matches in FOR and NEXT
-                    if for_line.for_statement.control_variable
-                        != next_line.next_statement.control_variable
-                    {
+                    if control_variable != next_line.next_statement.control_variable {
                         return Err(Error::InvalidControlVariable {
                             src_line_number: next_line.line_number,
                             control_variable: format!(
@@ -136,7 +135,7 @@ impl<'a> Program<'a> {
                     // check that control variable is not used in a parent FOR..NEXT
                     if let Some(outer_line_number) = state
                         .for_control_variables_stack
-                        .get(&for_line.for_statement.control_variable)
+                        .get(&control_variable)
                         .cloned()
                     {
                         return Err(Error::ControlVariableReuse {
@@ -144,34 +143,33 @@ impl<'a> Program<'a> {
                             outer_line_number,
                         });
                     }
-                    state.for_control_variables_stack.insert(
-                        for_line.for_statement.control_variable,
-                        for_line.line_number,
-                    );
+                    state
+                        .for_control_variables_stack
+                        .insert(control_variable, for_line.line_number);
 
                     // LET .. = limit
-                    let limit = NumericVariable::Limit {
+                    let limit = LimitVariable {
                         line_number: for_line.line_number,
                     };
                     self.blocks.push(Block::Line {
                         line_number: state.next_internal_line_number(),
                         statement_source: Span::new(CompleteStr("")),
                         statement: Statement::Let(LetStatement::Numeric {
-                            variable: limit,
+                            variable: NumericVariable::Limit(limit),
                             expression: for_line.for_statement.limit,
                         }),
                     });
                     self.index_last_block()?;
 
                     // LET .. = increment
-                    let increment = NumericVariable::Increment {
+                    let increment = IncrementVariable {
                         line_number: for_line.line_number,
                     };
                     self.blocks.push(Block::Line {
                         line_number: state.next_internal_line_number(),
                         statement_source: Span::new(CompleteStr("")),
                         statement: Statement::Let(LetStatement::Numeric {
-                            variable: increment,
+                            variable: NumericVariable::Increment(increment),
                             expression: for_line
                                 .for_statement
                                 .increment
@@ -185,7 +183,7 @@ impl<'a> Program<'a> {
                         line_number: state.next_internal_line_number(),
                         statement_source: for_line.statement_source,
                         statement: Statement::Let(LetStatement::Numeric {
-                            variable: for_line.for_statement.control_variable,
+                            variable: NumericVariable::Simple(control_variable),
                             expression: for_line.for_statement.initial_value,
                         }),
                     });
@@ -196,13 +194,19 @@ impl<'a> Program<'a> {
                         terms: vec![
                             (
                                 Sign::Pos,
-                                Term::with_variable(for_line.for_statement.control_variable),
+                                Term::with_variable(NumericVariable::Simple(control_variable)),
                             ),
-                            (Sign::Neg, Term::with_variable(limit)),
+                            (
+                                Sign::Neg,
+                                Term::with_variable(NumericVariable::Limit(limit)),
+                            ),
                         ],
                     };
                     let inc = NumericExpression {
-                        terms: vec![(Sign::Pos, Term::with_variable(increment))],
+                        terms: vec![(
+                            Sign::Pos,
+                            Term::with_variable(NumericVariable::Increment(increment)),
+                        )],
                     };
                     let sgn_inc = Function::Sgn(inc);
                     let condition = NumericExpression {
@@ -234,25 +238,26 @@ impl<'a> Program<'a> {
                     // add inner blocks recursively
                     self.build(blocks, state)?;
 
-                    state
-                        .for_control_variables_stack
-                        .remove(&for_line.for_statement.control_variable);
+                    state.for_control_variables_stack.remove(&control_variable);
 
                     // LET control_variable = control_variable + increment
                     self.blocks.push(Block::Line {
                         line_number: next_line.line_number,
                         statement_source: next_line.statement_source,
                         statement: Statement::Let(LetStatement::Numeric {
-                            variable: for_line.for_statement.control_variable,
+                            variable: NumericVariable::Simple(control_variable),
                             expression: NumericExpression {
                                 terms: vec![
                                     (
                                         Sign::Pos,
-                                        Term::with_variable(
-                                            for_line.for_statement.control_variable,
-                                        ),
+                                        Term::with_variable(NumericVariable::Simple(
+                                            control_variable,
+                                        )),
                                     ),
-                                    (Sign::Pos, Term::with_variable(increment)),
+                                    (
+                                        Sign::Pos,
+                                        Term::with_variable(NumericVariable::Increment(increment)),
+                                    ),
                                 ],
                             },
                         }),
@@ -353,7 +358,7 @@ impl<'a> Program<'a> {
 #[derive(Debug)]
 struct ProgramBuilderState {
     internal_line_numer: u16,
-    for_control_variables_stack: HashMap<NumericVariable, u16 /* line number */>,
+    for_control_variables_stack: HashMap<SimpleNumericVariable, u16 /* line number */>,
     /// FOR deepness level for each line
     for_levels: HashMap<u16 /* line number */, usize>,
 }
@@ -443,7 +448,7 @@ pub enum Statement {
 
 #[derive(Debug, PartialEq)]
 pub struct ForStatement {
-    pub control_variable: NumericVariable,
+    pub control_variable: SimpleNumericVariable,
     pub initial_value: NumericExpression,
     pub limit: NumericExpression,
     pub increment: Option<NumericExpression>,
@@ -451,7 +456,7 @@ pub struct ForStatement {
 
 #[derive(Debug, PartialEq)]
 pub struct NextStatement {
-    pub control_variable: NumericVariable,
+    pub control_variable: SimpleNumericVariable,
 }
 
 #[derive(Debug, PartialEq)]
@@ -513,27 +518,62 @@ impl From<(f64, i32)> for NumericConstant {
 pub struct StringConstant(pub String);
 
 // 7. Variable
-// TODO: numeric-array-element is missing
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+/// Numeric variable containing expressions.
+///
+/// It cannot be stored inside program memory, due to possible deeply nested
+/// expressions in array variables.
+#[derive(Debug, PartialEq)]
 pub enum NumericVariable {
-    Simple { letter: char, digit: Option<u8> },
-    Limit { line_number: u16 },
-    Increment { line_number: u16 },
+    Simple(SimpleNumericVariable),
+    Limit(LimitVariable),
+    Increment(IncrementVariable),
+    Array(ArrayVariable),
 }
 
 impl fmt::Display for NumericVariable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            NumericVariable::Simple { letter, digit } => {
-                f.write_char(*letter)?;
-                if let Some(digit) = digit {
-                    write!(f, "{}", digit)?;
-                }
-                Ok(())
+            NumericVariable::Simple(v) => write!(f, "{}", v),
+            NumericVariable::Array(_) => panic!("logic error: formatting array variable"),
+            NumericVariable::Limit(_) | NumericVariable::Increment(_) => {
+                panic!("logic error: formatting internal variable")
             }
-            _ => panic!("logic error: formatting internal variable"),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum PlainNumericVariable {
+    Simple(SimpleNumericVariable),
+    Limit(LimitVariable),
+    Increment(IncrementVariable),
+    Array(PlainArrayVariable),
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct LimitVariable {
+    pub line_number: u16,
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct IncrementVariable {
+    pub line_number: u16,
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct SimpleNumericVariable {
+    pub letter: char,
+    pub digit: Option<u8>,
+}
+
+impl fmt::Display for SimpleNumericVariable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_char(self.letter)?;
+        if let Some(digit) = self.digit {
+            write!(f, "{}", digit)?;
+        }
+        Ok(())
     }
 }
 
@@ -550,6 +590,18 @@ impl fmt::Display for StringVariable {
 pub enum Variable {
     Numeric(NumericVariable),
     String(StringVariable),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ArrayVariable {
+    pub letter: char,
+    pub subscript: (NumericExpression, Option<NumericExpression>),
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct PlainArrayVariable {
+    pub letter: char,
+    pub subscript: (usize, Option<usize>),
 }
 
 // 8. Expressions

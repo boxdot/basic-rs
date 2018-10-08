@@ -26,7 +26,7 @@ struct State {
     /// current columnar position of the cursor
     columnar_position: usize,
     /// values of numeric variables
-    numeric_values: HashMap<NumericVariable, f64>,
+    numeric_values: HashMap<PlainNumericVariable, f64>,
     /// values of string variables
     string_values: HashMap<StringVariable, String>,
     /// stack of return line numbers for routines
@@ -275,7 +275,8 @@ impl<'a> Interpreter<'a> {
                 expression,
             } => {
                 let value = self.evaluate_numeric_expression(expression, stderr)?;
-                self.state.numeric_values.insert(*variable, value);
+                let variable = self.make_plain(variable, stderr)?;
+                self.state.numeric_values.insert(variable, value);
             }
             LetStatement::String {
                 variable,
@@ -382,7 +383,8 @@ impl<'a> Interpreter<'a> {
                     match res {
                         Ok((remaining, ref c)) if remaining.fragment.is_empty() => {
                             let value = self.evaluate_numeric_constant(c, stderr)?;
-                            self.state.numeric_values.insert(*v, value);
+                            let v = self.make_plain(v, stderr)?;
+                            self.state.numeric_values.insert(v, value);
                         }
                         _ => {
                             return Err(Error::ReadDatatypeMismatch {
@@ -453,7 +455,7 @@ impl<'a> Interpreter<'a> {
         stderr: &mut W,
     ) -> Result<f64, Error> {
         let value = match primary {
-            Primary::Variable(v) => self.evaluate_numeric_variable(v)?,
+            Primary::Variable(v) => self.evaluate_numeric_variable(v, stderr)?,
             Primary::Constant(c) => self.evaluate_numeric_constant(c, stderr)?,
             Primary::Function(f) => self.evaluate_function(f, stderr)?,
             Primary::Expression(e) => self.evaluate_numeric_expression(e, stderr)?,
@@ -533,23 +535,29 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn evaluate_numeric_variable(&self, variable: &NumericVariable) -> Result<f64, Error> {
+    fn evaluate_numeric_variable<W: Write>(
+        &mut self,
+        variable: &NumericVariable,
+        stderr: &mut W,
+    ) -> Result<f64, Error> {
+        let variable = self.make_plain(variable, stderr)?;
         match variable {
-            NumericVariable::Simple { .. } => Ok(self
+            PlainNumericVariable::Simple { .. } => Ok(self
                 .state
                 .numeric_values
-                .get(variable)
+                .get(&variable)
                 .cloned()
                 .unwrap_or(0f64)),
-            NumericVariable::Increment { line_number } | NumericVariable::Limit { line_number } => {
-                self.state
-                    .numeric_values
-                    .get(variable)
-                    .cloned()
-                    .ok_or_else(|| Error::JumpIntoFor {
-                        src_line_number: *line_number,
-                    })
-            }
+            PlainNumericVariable::Increment(IncrementVariable { line_number })
+            | PlainNumericVariable::Limit(LimitVariable { line_number }) => self
+                .state
+                .numeric_values
+                .get(&variable)
+                .cloned()
+                .ok_or_else(|| Error::JumpIntoFor {
+                    src_line_number: line_number,
+                }),
+            _ => unimplemented!(),
         }
     }
 
@@ -596,6 +604,31 @@ impl<'a> Interpreter<'a> {
         } else {
             Ok(statement.line_numbers[result_index - 1])
         }
+    }
+
+    fn make_plain<W: Write>(
+        &mut self,
+        variable: &NumericVariable,
+        stderr: &mut W,
+    ) -> Result<PlainNumericVariable, Error> {
+        let plain_variable = match variable {
+            NumericVariable::Simple(v) => PlainNumericVariable::Simple(*v),
+            NumericVariable::Limit(v) => PlainNumericVariable::Limit(*v),
+            NumericVariable::Increment(v) => PlainNumericVariable::Increment(*v),
+            NumericVariable::Array(ArrayVariable { letter, subscript }) => {
+                let subscript1 = self.evaluate_numeric_expression(&subscript.0, stderr)? as usize;
+                let subscript2 = if let Some(ref v) = subscript.1 {
+                    Some(self.evaluate_numeric_expression(v, stderr)? as usize)
+                } else {
+                    None
+                };
+                PlainNumericVariable::Array(PlainArrayVariable {
+                    letter: *letter,
+                    subscript: (subscript1, subscript2),
+                })
+            }
+        };
+        Ok(plain_variable)
     }
 
     // Helper functions

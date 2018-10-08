@@ -302,7 +302,7 @@ try_test_program!(P166);
 try_test_program!(P167);
 try_test_program!(P168);
 try_test_program!(P169);
-try_test_program!(P170);
+test_program!(P170);
 try_test_program!(P171);
 test_program!(P172);
 test_program!(P173);
