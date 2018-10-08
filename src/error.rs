@@ -39,7 +39,6 @@ pub enum Error {
     },
     ReadDatatypeMismatch {
         src_line_number: u16,
-        data_pointer: u16,
     },
     FunctionDomainError {
         src_line_number: u16,
@@ -131,13 +130,10 @@ impl fmt::Display for Error {
                 "{}: error: insufficient data for READ \n",
                 src_line_number
             ),
-            Error::ReadDatatypeMismatch {
-                src_line_number,
-                data_pointer,
-            } => write!(
+            Error::ReadDatatypeMismatch { src_line_number } => write!(
                 f,
-                "{}: error: mismatch between read statement and DATA at position {}",
-                src_line_number, data_pointer
+                "{}: error: reading string into numeric variable \n",
+                src_line_number
             ),
             Error::FunctionDomainError {
                 src_line_number,

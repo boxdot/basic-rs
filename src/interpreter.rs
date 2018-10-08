@@ -4,6 +4,7 @@ use format::format_float;
 use parser;
 
 use itertools::Itertools;
+use nom::types::CompleteStr;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 
@@ -370,25 +371,25 @@ impl<'a> Interpreter<'a> {
                 .ok_or_else(|| Error::InsufficientData {
                     src_line_number: self.state.current_line_number,
                 })?;
-            match (variable, datum) {
-                (Variable::Numeric(v), Constant::Numeric(c)) => {
-                    let value = self.evaluate_numeric_constant(&c, stderr)?;
-                    self.state.numeric_values.insert(*v, value);
+            match variable {
+                Variable::String(v) => {
+                    self.state.string_values.insert(*v, datum.0.clone());
                 }
-                (Variable::String(v), Constant::String(s)) => {
-                    self.state.string_values.insert(*v, s.0.clone());
-                }
-                (Variable::String(v), Constant::Numeric(c)) => {
-                    // reinterpret numeric constant as a string
-                    let value = self.evaluate_numeric_constant(&c, stderr)?;
-                    let value = format_float(value).trim().into();
-                    self.state.string_values.insert(*v, value);
-                }
-                (_, _) => {
-                    return Err(Error::ReadDatatypeMismatch {
-                        src_line_number: self.state.current_line_number,
-                        data_pointer: self.state.data_pointer,
-                    })
+                Variable::Numeric(v) => {
+                    // FIXME: After reading unquoted string, we should try to parse it as
+                    // numeric variable again, and store its value in datum.
+                    let res = parser::numeric_constant(parser::Span::new(CompleteStr(&datum.0)));
+                    match res {
+                        Ok((remaining, ref c)) if remaining.fragment.is_empty() => {
+                            let value = self.evaluate_numeric_constant(c, stderr)?;
+                            self.state.numeric_values.insert(*v, value);
+                        }
+                        _ => {
+                            return Err(Error::ReadDatatypeMismatch {
+                                src_line_number: self.state.current_line_number,
+                            })
+                        }
+                    }
                 }
             }
             self.state.data_pointer += 1;
