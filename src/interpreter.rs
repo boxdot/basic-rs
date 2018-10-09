@@ -8,7 +8,7 @@ use nom::types::CompleteStr;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 
-use std::collections::HashMap;
+use std::collections::{hash_map, HashMap};
 use std::io::Write;
 
 pub struct Interpreter<'a> {
@@ -29,6 +29,8 @@ struct State {
     numeric_values: HashMap<PlainNumericVariable, f64>,
     /// values of string variables
     string_values: HashMap<StringVariable, String>,
+    /// values of array variables
+    array_values: Vec<f64>,
     /// stack of return line numbers for routines
     stack: Vec<u16>,
     /// DATA statement pointer
@@ -45,6 +47,7 @@ impl Default for State {
             columnar_position: Default::default(),
             numeric_values: Default::default(),
             string_values: Default::default(),
+            array_values: Default::default(),
             stack: Default::default(),
             data_pointer: Default::default(),
             rng: SmallRng::from_seed([
@@ -89,7 +92,9 @@ impl<'a> Interpreter<'a> {
                     self.state.current_source_offset = statement_source.offset;
                     self.evaluate_statement(statement, stdout, stderr)?
                 }
-                Block::For { .. } => unimplemented!(),
+                Block::For { .. } => {
+                    panic!("logic error: FOR should be compiled to other statements")
+                }
             };
 
             let src_line_number = self.state.current_line_number;
@@ -179,7 +184,10 @@ impl<'a> Interpreter<'a> {
             Statement::Return => Action::Return,
             Statement::Stop => Action::Stop,
             Statement::End => Action::Stop,
-            Statement::Dim(_) => unimplemented!(),
+            Statement::Dim(array_declarations) => {
+                self.evaluate_dim(array_declarations)?;
+                Action::NextLine
+            }
         };
         Ok(res)
     }
@@ -271,6 +279,22 @@ impl<'a> Interpreter<'a> {
         stderr: &mut W,
     ) -> Result<(), Error> {
         match statement {
+            LetStatement::Numeric {
+                variable: NumericVariable::Array(ar),
+                expression,
+            } => {
+                let ar = self.make_array_plain(ar, stderr)?;
+                let value = self.evaluate_numeric_expression(expression, stderr)?;
+                let index = self.get_array_index(&ar);
+                let src_line_number = self.state.current_line_number;
+                let variable = self.state.array_values.get_mut(index).ok_or_else(|| {
+                    Error::ArrayIndexOutOfRange {
+                        src_line_number,
+                        array: format!("{}", ar),
+                    }
+                })?;
+                *variable = value;
+            }
             LetStatement::Numeric {
                 variable,
                 expression,
@@ -558,7 +582,7 @@ impl<'a> Interpreter<'a> {
                 .ok_or_else(|| Error::JumpIntoFor {
                     src_line_number: line_number,
                 }),
-            _ => unimplemented!(),
+            PlainNumericVariable::Array(ar) => Ok(self.get_array_value(&ar)),
         }
     }
 
@@ -607,6 +631,18 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    fn evaluate_dim(&mut self, ar_decls: &[ArrayDeclaration]) -> Result<(), Error> {
+        for ar_decl in ar_decls {
+            let (_, allocated) = self.try_alloc_array(ar_decl);
+            if !allocated {
+                return Err(Error::DimForExistingArray {
+                    src_line_number: self.state.current_line_number,
+                });
+            }
+        }
+        Ok(())
+    }
+
     fn make_plain<W: Write>(
         &mut self,
         variable: &NumericVariable,
@@ -616,23 +652,77 @@ impl<'a> Interpreter<'a> {
             NumericVariable::Simple(v) => PlainNumericVariable::Simple(*v),
             NumericVariable::Limit(v) => PlainNumericVariable::Limit(*v),
             NumericVariable::Increment(v) => PlainNumericVariable::Increment(*v),
-            NumericVariable::Array(ArrayVariable { letter, subscript }) => {
-                let subscript1 = self.evaluate_numeric_expression(&subscript.0, stderr)? as usize;
-                let subscript2 = if let Some(ref v) = subscript.1 {
-                    Some(self.evaluate_numeric_expression(v, stderr)? as usize)
-                } else {
-                    None
-                };
-                PlainNumericVariable::Array(PlainArrayVariable {
-                    letter: *letter,
-                    subscript: (subscript1, subscript2),
-                })
+            NumericVariable::Array(ar) => {
+                PlainNumericVariable::Array(self.make_array_plain(ar, stderr)?)
             }
         };
         Ok(plain_variable)
     }
 
+    fn make_array_plain<W: Write>(
+        &mut self,
+        ar: &ArrayVariable,
+        stderr: &mut W,
+    ) -> Result<PlainArrayVariable, Error> {
+        let subscript1 = self
+            .evaluate_numeric_expression(&ar.subscript.0, stderr)?
+            .round() as usize;
+        let subscript2 = if let Some(ref v) = ar.subscript.1 {
+            Some(self.evaluate_numeric_expression(v, stderr)?.round() as usize)
+        } else {
+            None
+        };
+        Ok(PlainArrayVariable {
+            letter: ar.letter,
+            subscript: (subscript1, subscript2),
+        })
+    }
+
     // Helper functions
+
+    fn get_array_value(&mut self, ar: &PlainArrayVariable) -> f64 {
+        let index = self.get_array_index(ar);
+        self.state.array_values[index]
+    }
+
+    fn get_array_index(&mut self, ar: &PlainArrayVariable) -> usize {
+        let offset = self.get_array_offset(ar);
+        let dim = self.state.array_values[offset] as usize;
+        let index = offset + 1 + ar.subscript.0 + dim * ar.subscript.1.unwrap_or(0);
+        index
+    }
+
+    fn get_array_offset(&mut self, ar: &PlainArrayVariable) -> usize {
+        let (offset, _) = self.try_alloc_array(&ArrayDeclaration {
+            letter: ar.letter,
+            bounds: (10, ar.subscript.1.map(|_| 10)),
+        });
+        offset
+    }
+
+    fn try_alloc_array(&mut self, decl: &ArrayDeclaration) -> (usize, bool) {
+        let offset = self.state.array_values.len();
+
+        // try to insert the offset into the map of all numeric variables
+        let entry =
+            self.state
+                .numeric_values
+                .entry(PlainNumericVariable::Array(PlainArrayVariable {
+                    letter: decl.letter,
+                    subscript: (0, Some(0)),
+                }));
+        match entry {
+            hash_map::Entry::Occupied(entry) => return (*entry.get() as usize, false),
+            hash_map::Entry::Vacant(entry) => entry.insert(offset as f64),
+        };
+
+        let num_elements = ((decl.bounds.0 + 1) * (decl.bounds.1.unwrap_or(0) + 1)) as usize;
+        self.state
+            .array_values
+            .resize(offset + 1 + num_elements, 0.0);
+        self.state.array_values[offset] = (decl.bounds.0 + 1) as f64;
+        (offset, true)
+    }
 
     fn get_source_line(&self, offset: usize) -> &str {
         self.source_code[offset..].lines().next().unwrap()
