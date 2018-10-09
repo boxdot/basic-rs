@@ -605,6 +605,17 @@ pub struct PlainArrayVariable {
     pub subscript: (usize, Option<usize>),
 }
 
+impl fmt::Display for PlainArrayVariable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let (subscript1, subscript2) = self.subscript;
+        if let Some(subscript2) = subscript2 {
+            write!(f, "{}({},{})", self.letter, subscript1, subscript2)
+        } else {
+            write!(f, "{}({})", self.letter, subscript1)
+        }
+    }
+}
+
 // 8. Expressions
 
 #[derive(Debug, PartialEq)]
