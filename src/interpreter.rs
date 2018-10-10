@@ -8,7 +8,7 @@ use nom::types::CompleteStr;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 
-use std::collections::{hash_map, HashMap};
+use std::collections::HashMap;
 use std::io::Write;
 
 pub struct Interpreter<'a> {
@@ -57,6 +57,18 @@ impl Default for State {
     }
 }
 
+impl State {
+    fn new(array_values_len: usize) -> Self {
+        Self {
+            array_values: vec![0.0; array_values_len],
+            rng: SmallRng::from_seed([
+                0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF,
+            ]),
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Debug)]
 enum Action {
     NextLine,
@@ -71,7 +83,7 @@ impl<'a> Interpreter<'a> {
         Self {
             program,
             source_code,
-            state: State::default(),
+            state: State::new(program.array_values_len),
         }
     }
 
@@ -88,7 +100,6 @@ impl<'a> Interpreter<'a> {
                     statement,
                     statement_source,
                 } => {
-                    // println!("{} {:?}", line_number, statement);
                     self.state.current_line_number = *line_number;
                     self.state.current_source_offset = statement_source.offset;
                     self.evaluate_statement(statement, stdout, stderr)?
@@ -185,14 +196,8 @@ impl<'a> Interpreter<'a> {
             Statement::Return => Action::Return,
             Statement::Stop => Action::Stop,
             Statement::End => Action::Stop,
-            Statement::Dim(array_declarations) => {
-                self.evaluate_dim(array_declarations);
-                Action::NextLine
-            }
-            Statement::OptionBase(_base) => {
-                // self.evaluate_option_base();
-                Action::NextLine
-            }
+            Statement::Dim(_) => Action::NextLine,
+            Statement::OptionBase(_) => Action::NextLine,
         };
         Ok(res)
     }
@@ -269,8 +274,7 @@ impl<'a> Interpreter<'a> {
                 PrintItem::Semicolon => true,
                 PrintItem::Comma => true,
                 _ => false,
-            })
-            .unwrap_or(false);
+            }).unwrap_or(false);
         if !last_item_is_comma_or_semicolon {
             self.state.columnar_position = 0;
             write!(stdout, "\n");
@@ -635,12 +639,6 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn evaluate_dim(&mut self, ar_decls: &[ArrayDeclaration]) {
-        for ar_decl in ar_decls {
-            self.try_alloc_array(ar_decl);
-        }
-    }
-
     fn make_plain<W: Write>(
         &mut self,
         variable: &NumericVariable,
@@ -678,49 +676,15 @@ impl<'a> Interpreter<'a> {
 
     // Helper functions
 
-    fn get_array_value(&mut self, ar: &PlainArrayVariable) -> f64 {
+    fn get_array_value(&self, ar: &PlainArrayVariable) -> f64 {
         let index = self.get_array_index(ar);
         self.state.array_values[index]
     }
 
-    fn get_array_index(&mut self, ar: &PlainArrayVariable) -> usize {
-        let offset = self.get_array_offset(ar);
-        let dim = self.state.array_values[offset] as usize;
-        let index = offset + 1 + ar.subscript.0 + dim * ar.subscript.1.unwrap_or(0);
+    fn get_array_index(&self, ar: &PlainArrayVariable) -> usize {
+        let dim = &self.program.array_dims[&ar.letter];
+        let index = dim.offset + ar.subscript.0 + dim.dim1 * ar.subscript.1.unwrap_or(0);
         index
-    }
-
-    fn get_array_offset(&mut self, ar: &PlainArrayVariable) -> usize {
-        let offset = self.try_alloc_array(&ArrayDeclaration {
-            letter: ar.letter,
-            bounds: (10, ar.subscript.1.map(|_| 10)),
-        });
-        offset
-    }
-
-    fn try_alloc_array(&mut self, decl: &ArrayDeclaration) -> usize {
-        // TODO: Return an error if there is another call to this with a different decl.
-        let new_offset = self.state.array_values.len();
-
-        // try to insert the offset into the map of all numeric variables
-        let entry =
-            self.state
-                .numeric_values
-                .entry(PlainNumericVariable::Array(PlainArrayVariable {
-                    letter: decl.letter,
-                    subscript: (0, Some(0)),
-                }));
-        match entry {
-            hash_map::Entry::Occupied(entry) => return *entry.get() as usize,
-            hash_map::Entry::Vacant(entry) => entry.insert(new_offset as f64),
-        };
-
-        let num_elements = ((decl.bounds.0 + 1) * (decl.bounds.1.unwrap_or(0) + 1)) as usize;
-        self.state
-            .array_values
-            .resize(new_offset + 1 + num_elements, 0.0);
-        self.state.array_values[new_offset] = (decl.bounds.0 + 1) as f64;
-        new_offset
     }
 
     fn get_source_line(&self, offset: usize) -> &str {
