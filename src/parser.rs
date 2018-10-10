@@ -168,7 +168,8 @@ named!(statement<Span, Statement>,
         data_statement |
         remark_statement |
         end_statement |
-        dimension_statement
+        dimension_statement |
+        option_base_statement
     ));
 
 // 6. Constants
@@ -659,6 +660,16 @@ named!(array_declaration<Span, ArrayDeclaration>,
 
 named!(bounds<Span, (u64, Option<u64>)>,
     pair!(integer, opt!(preceded!(char!(','), integer))));
+
+named!(option_base_statement<Span, Statement>,
+    do_parse!(
+        tag!("OPTION") >>
+        space >>
+        tag!("BASE") >>
+        space >>
+        n: alt!(char!('0') | char!('1')) >>
+        (Statement::OptionBase(if n == '0' { OptionBase::Base0 } else { OptionBase::Base1 }))
+    ));
 
 // 19. REMARK statement
 

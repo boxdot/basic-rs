@@ -188,6 +188,10 @@ impl<'a> Interpreter<'a> {
                 self.evaluate_dim(array_declarations)?;
                 Action::NextLine
             }
+            Statement::OptionBase(_base) => {
+                // self.evaluate_option_base();
+                Action::NextLine
+            }
         };
         Ok(res)
     }
@@ -264,7 +268,8 @@ impl<'a> Interpreter<'a> {
                 PrintItem::Semicolon => true,
                 PrintItem::Comma => true,
                 _ => false,
-            }).unwrap_or(false);
+            })
+            .unwrap_or(false);
         if !last_item_is_comma_or_semicolon {
             self.state.columnar_position = 0;
             write!(stdout, "\n");
