@@ -656,7 +656,8 @@ impl<'a> Interpreter<'a> {
         let subscript1 = self
             .evaluate_numeric_expression(&ar.subscript.0, stderr)?
             .round() as isize;
-        if subscript1 < 0 || subscript1 >= self.program.array_dims[&ar.letter].dim1 as isize {
+        let base = self.program.array_base as isize;
+        if subscript1 < base || subscript1 >= self.program.array_dims[&ar.letter].dim1 as isize {
             return Err(Error::ArrayIndexOutOfRange {
                 src_line_number: self.state.current_line_number,
                 array: format!(
@@ -683,7 +684,7 @@ impl<'a> Interpreter<'a> {
 
         let subscript2 = if let Some(ref v) = ar.subscript.1 {
             let subscript2 = self.evaluate_numeric_expression(v, stderr)?.round() as isize;
-            if subscript2 < 0 || subscript2 >= dim.dim2 as isize {
+            if subscript2 < base || subscript2 >= dim.dim2 as isize {
                 return Err(Error::ArrayIndexOutOfRange {
                     src_line_number: self.state.current_line_number,
                     array: format!("{}(...,{})", ar.letter, subscript2),

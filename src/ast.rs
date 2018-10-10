@@ -17,6 +17,7 @@ pub struct Program<'a> {
     pub data: Vec<StringConstant>,
     pub array_dims: HashMap<char, ArrayDimension>,
     pub array_values_len: usize,
+    pub array_base: OptionBase,
 }
 
 impl<'a> Program<'a> {
@@ -144,6 +145,10 @@ impl<'a> Program<'a> {
                                 dim
                             });
                             self.array_values_len += offset_inc;
+                        }
+                        Statement::OptionBase(base) => {
+                            self.array_base = base;
+                            replace_by_rem = true;
                         }
                         _ => (),
                     };
@@ -865,13 +870,19 @@ pub struct ArrayDeclaration {
     pub bounds: (u64, Option<u64>),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OptionBase {
-    Base0,
-    Base1,
+    Base0 = 0,
+    Base1 = 1,
 }
 
-#[derive(Debug, Clone, Copy)]
+impl Default for OptionBase {
+    fn default() -> Self {
+        OptionBase::Base0
+    }
+}
+
+#[derive(Debug)]
 pub struct ArrayDimension {
     pub dim1: usize,
     pub dim2: usize,
