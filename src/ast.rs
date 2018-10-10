@@ -15,6 +15,8 @@ pub struct Program<'a> {
     pub blocks: Vec<Block<'a>>,
     block_index: HashMap<u16, usize>,
     pub data: Vec<StringConstant>,
+    pub array_dims: HashMap<char, ArrayDimension>,
+    pub array_values_len: usize,
 }
 
 impl<'a> Program<'a> {
@@ -83,34 +85,85 @@ impl<'a> Program<'a> {
         state: &mut ProgramBuilderState,
     ) -> Result<(), Error> {
         // 1. Create index of all blocks.
-        // 2. Move out all data block into `data`
-        // FIXME: We could increase performance by removing data blocks from all blocks,
-        // however we still need to keep index of them, since a GOTO statement could jump
-        // on a data block. Instead, we replace them with REM.
+        // 2. Move out all data block into `data`.
         // 3. Flatten FOR blocks and generate equivalent code without FOR.
+        // 4. Collect all array dimensions.
         for block in blocks {
             match block {
                 Block::Line {
                     line_number,
                     statement_source,
-                    statement,
+                    mut statement,
                     ..
                 } => {
+                    let mut replace_by_rem = false;
+
                     match statement {
-                        Statement::Data(mut statement_data) => {
-                            self.data.append(&mut statement_data);
-                            self.blocks.push(Block::Line {
-                                line_number,
-                                statement_source,
-                                statement: Statement::Rem,
-                            })
+                        Statement::Data(ref mut statement_data) => {
+                            self.data.append(statement_data);
+                            replace_by_rem = true;
                         }
-                        other_statement => self.blocks.push(Block::Line {
+                        Statement::Dim(ref ar_decls) => {
+                            for decl in ar_decls {
+                                let dim = ArrayDimension {
+                                    dim1: decl.bounds.0 as usize + 1,
+                                    dim2: decl.bounds.1.unwrap_or(0) as usize + 1,
+                                    offset: self.array_values_len,
+                                };
+                                let inserted = self.array_dims.insert(
+                                    decl.letter,
+                                    ArrayDimension {
+                                        dim1: decl.bounds.0 as usize + 1,
+                                        dim2: decl.bounds.1.unwrap_or(0) as usize + 1,
+                                        offset: self.array_values_len,
+                                    },
+                                );
+                                self.array_values_len += dim.len();
+                                if inserted.is_some() {
+                                    panic!("duplicate array declaration"); // TODO: Replace with error
+                                }
+                            }
+                            replace_by_rem = true;
+                        }
+                        Statement::Let(LetStatement::Numeric {
+                            variable:
+                                NumericVariable::Array(ArrayVariable {
+                                    letter,
+                                    ref subscript,
+                                }),
+                            ..
+                        }) => {
+                            let dim = ArrayDimension {
+                                dim1: 11,
+                                dim2: subscript.1.as_ref().map(|_| 11).unwrap_or(1),
+                                offset: self.array_values_len,
+                            };
+                            let mut offset_inc = 0;
+                            self.array_dims.entry(letter).or_insert_with(|| {
+                                offset_inc += dim.len();
+                                dim
+                            });
+                            self.array_values_len += offset_inc;
+                        }
+                        _ => (),
+                    };
+
+                    if replace_by_rem {
+                        // TODO: Remove this and other REMs. For that, we need to check that there
+                        // are not jumps on such lines, and if there are some, replace them.
+                        self.blocks.push(Block::Line {
                             line_number,
                             statement_source,
-                            statement: other_statement,
-                        }),
-                    };
+                            statement: Statement::Rem,
+                        })
+                    } else {
+                        self.blocks.push(Block::Line {
+                            line_number,
+                            statement_source,
+                            statement,
+                        })
+                    }
+
                     state.index_for_level(line_number);
                     self.index_last_block()?;
                 }
@@ -816,4 +869,17 @@ pub struct ArrayDeclaration {
 pub enum OptionBase {
     Base0,
     Base1,
+}
+
+#[derive(Debug)]
+pub struct ArrayDimension {
+    pub dim1: usize,
+    pub dim2: usize,
+    pub offset: usize,
+}
+
+impl ArrayDimension {
+    pub fn len(&self) -> usize {
+        self.dim1 * self.dim2
+    }
 }
