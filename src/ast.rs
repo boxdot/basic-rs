@@ -871,7 +871,7 @@ pub enum OptionBase {
     Base1,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct ArrayDimension {
     pub dim1: usize,
     pub dim2: usize,
