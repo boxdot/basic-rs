@@ -293,16 +293,9 @@ impl<'a> Interpreter<'a> {
                 variable: NumericVariable::Array(ar),
                 expression,
             } => {
-                let ar = self.make_array_plain(ar, stderr)?;
+                let (_, index) = self.make_array_plain(ar, stderr)?;
                 let value = self.evaluate_numeric_expression(expression, stderr)?;
-                let index = self.get_array_index(&ar);
-                let src_line_number = self.state.current_line_number;
-                let variable = self.state.array_values.get_mut(index).ok_or_else(|| {
-                    Error::ArrayIndexOutOfRange {
-                        src_line_number,
-                        array: format!("{}", ar),
-                    }
-                })?;
+                let variable = &mut self.state.array_values[index];
                 *variable = value;
             }
             LetStatement::Numeric {
@@ -649,7 +642,7 @@ impl<'a> Interpreter<'a> {
             NumericVariable::Limit(v) => PlainNumericVariable::Limit(*v),
             NumericVariable::Increment(v) => PlainNumericVariable::Increment(*v),
             NumericVariable::Array(ar) => {
-                PlainNumericVariable::Array(self.make_array_plain(ar, stderr)?)
+                PlainNumericVariable::Array(self.make_array_plain(ar, stderr)?.0)
             }
         };
         Ok(plain_variable)
@@ -659,11 +652,24 @@ impl<'a> Interpreter<'a> {
         &mut self,
         ar: &ArrayVariable,
         stderr: &mut W,
-    ) -> Result<PlainArrayVariable, Error> {
+    ) -> Result<(PlainArrayVariable, usize), Error> {
         let subscript1 = self
             .evaluate_numeric_expression(&ar.subscript.0, stderr)?
             .round() as isize;
-        if subscript1 < 0 {
+        if subscript1 < 0 || subscript1 >= self.program.array_dims[&ar.letter].dim1 as isize {
+            return Err(Error::ArrayIndexOutOfRange {
+                src_line_number: self.state.current_line_number,
+                array: format!(
+                    "{}({}{})",
+                    ar.letter,
+                    subscript1,
+                    ar.subscript.1.as_ref().map(|_| ",...").unwrap_or("")
+                ),
+            });
+        }
+
+        let dim = &self.program.array_dims[&ar.letter];
+        if subscript1 >= dim.dim1 as isize {
             return Err(Error::ArrayIndexOutOfRange {
                 src_line_number: self.state.current_line_number,
                 array: format!(
@@ -677,7 +683,7 @@ impl<'a> Interpreter<'a> {
 
         let subscript2 = if let Some(ref v) = ar.subscript.1 {
             let subscript2 = self.evaluate_numeric_expression(v, stderr)?.round() as isize;
-            if subscript2 < 0 {
+            if subscript2 < 0 || subscript2 >= dim.dim2 as isize {
                 return Err(Error::ArrayIndexOutOfRange {
                     src_line_number: self.state.current_line_number,
                     array: format!("{}(...,{})", ar.letter, subscript2),
@@ -687,10 +693,17 @@ impl<'a> Interpreter<'a> {
         } else {
             None
         };
-        Ok(PlainArrayVariable {
-            letter: ar.letter,
-            subscript: (subscript1 as usize, subscript2.map(|value| value as usize)),
-        })
+
+        let subscript1 = subscript1 as usize;
+        let subscript2 = subscript2.map(|value| value as usize);
+
+        Ok((
+            PlainArrayVariable {
+                letter: ar.letter,
+                subscript: (subscript1, subscript2),
+            },
+            dim.offset + subscript1 + dim.dim1 * subscript2.unwrap_or(0),
+        ))
     }
 
     // Helper functions
