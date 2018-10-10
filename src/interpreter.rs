@@ -662,15 +662,34 @@ impl<'a> Interpreter<'a> {
     ) -> Result<PlainArrayVariable, Error> {
         let subscript1 = self
             .evaluate_numeric_expression(&ar.subscript.0, stderr)?
-            .round() as usize;
+            .round() as isize;
+        if subscript1 < 0 {
+            return Err(Error::ArrayIndexOutOfRange {
+                src_line_number: self.state.current_line_number,
+                array: format!(
+                    "{}({}{})",
+                    ar.letter,
+                    subscript1,
+                    ar.subscript.1.as_ref().map(|_| ",...").unwrap_or("")
+                ),
+            });
+        }
+
         let subscript2 = if let Some(ref v) = ar.subscript.1 {
-            Some(self.evaluate_numeric_expression(v, stderr)?.round() as usize)
+            let subscript2 = self.evaluate_numeric_expression(v, stderr)?.round() as isize;
+            if subscript2 < 0 {
+                return Err(Error::ArrayIndexOutOfRange {
+                    src_line_number: self.state.current_line_number,
+                    array: format!("{}(...,{})", ar.letter, subscript2),
+                });
+            }
+            Some(subscript2)
         } else {
             None
         };
         Ok(PlainArrayVariable {
             letter: ar.letter,
-            subscript: (subscript1, subscript2),
+            subscript: (subscript1 as usize, subscript2.map(|value| value as usize)),
         })
     }
 
