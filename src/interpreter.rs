@@ -88,6 +88,7 @@ impl<'a> Interpreter<'a> {
                     statement,
                     statement_source,
                 } => {
+                    // println!("{} {:?}", line_number, statement);
                     self.state.current_line_number = *line_number;
                     self.state.current_source_offset = statement_source.offset;
                     self.evaluate_statement(statement, stdout, stderr)?
@@ -185,7 +186,7 @@ impl<'a> Interpreter<'a> {
             Statement::Stop => Action::Stop,
             Statement::End => Action::Stop,
             Statement::Dim(array_declarations) => {
-                self.evaluate_dim(array_declarations)?;
+                self.evaluate_dim(array_declarations);
                 Action::NextLine
             }
             Statement::OptionBase(_base) => {
@@ -579,14 +580,12 @@ impl<'a> Interpreter<'a> {
                 .cloned()
                 .unwrap_or(0f64)),
             PlainNumericVariable::Increment(IncrementVariable { line_number })
-            | PlainNumericVariable::Limit(LimitVariable { line_number }) => self
-                .state
-                .numeric_values
-                .get(&variable)
-                .cloned()
-                .ok_or_else(|| Error::JumpIntoFor {
+            | PlainNumericVariable::Limit(LimitVariable { line_number }) => {
+                let res = self.state.numeric_values.get(&variable).cloned();
+                res.ok_or_else(|| Error::JumpIntoFor {
                     src_line_number: line_number,
-                }),
+                })
+            }
             PlainNumericVariable::Array(ar) => Ok(self.get_array_value(&ar)),
         }
     }
@@ -636,16 +635,10 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn evaluate_dim(&mut self, ar_decls: &[ArrayDeclaration]) -> Result<(), Error> {
+    fn evaluate_dim(&mut self, ar_decls: &[ArrayDeclaration]) {
         for ar_decl in ar_decls {
-            let (_, allocated) = self.try_alloc_array(ar_decl);
-            if !allocated {
-                return Err(Error::DimForExistingArray {
-                    src_line_number: self.state.current_line_number,
-                });
-            }
+            self.try_alloc_array(ar_decl);
         }
-        Ok(())
     }
 
     fn make_plain<W: Write>(
@@ -698,15 +691,16 @@ impl<'a> Interpreter<'a> {
     }
 
     fn get_array_offset(&mut self, ar: &PlainArrayVariable) -> usize {
-        let (offset, _) = self.try_alloc_array(&ArrayDeclaration {
+        let offset = self.try_alloc_array(&ArrayDeclaration {
             letter: ar.letter,
             bounds: (10, ar.subscript.1.map(|_| 10)),
         });
         offset
     }
 
-    fn try_alloc_array(&mut self, decl: &ArrayDeclaration) -> (usize, bool) {
-        let offset = self.state.array_values.len();
+    fn try_alloc_array(&mut self, decl: &ArrayDeclaration) -> usize {
+        // TODO: Return an error if there is another call to this with a different decl.
+        let new_offset = self.state.array_values.len();
 
         // try to insert the offset into the map of all numeric variables
         let entry =
@@ -717,16 +711,16 @@ impl<'a> Interpreter<'a> {
                     subscript: (0, Some(0)),
                 }));
         match entry {
-            hash_map::Entry::Occupied(entry) => return (*entry.get() as usize, false),
-            hash_map::Entry::Vacant(entry) => entry.insert(offset as f64),
+            hash_map::Entry::Occupied(entry) => return *entry.get() as usize,
+            hash_map::Entry::Vacant(entry) => entry.insert(new_offset as f64),
         };
 
         let num_elements = ((decl.bounds.0 + 1) * (decl.bounds.1.unwrap_or(0) + 1)) as usize;
         self.state
             .array_values
-            .resize(offset + 1 + num_elements, 0.0);
-        self.state.array_values[offset] = (decl.bounds.0 + 1) as f64;
-        (offset, true)
+            .resize(new_offset + 1 + num_elements, 0.0);
+        self.state.array_values[new_offset] = (decl.bounds.0 + 1) as f64;
+        new_offset
     }
 
     fn get_source_line(&self, offset: usize) -> &str {

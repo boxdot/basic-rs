@@ -59,9 +59,6 @@ pub enum Error {
     IndexOutOfRange {
         src_line_number: u16,
     },
-    DimForExistingArray {
-        src_line_number: u16,
-    },
     ArrayIndexOutOfRange {
         src_line_number: u16,
         array: String,
@@ -173,11 +170,6 @@ impl fmt::Display for Error {
             Error::IndexOutOfRange { src_line_number } => {
                 write!(f, "{}: error: index out of range \n", src_line_number)
             }
-            Error::DimForExistingArray { src_line_number } => write!(
-                f,
-                "{}: error: DIM called for existing array \n",
-                src_line_number
-            ),
             Error::ArrayIndexOutOfRange {
                 src_line_number,
                 ref array,
