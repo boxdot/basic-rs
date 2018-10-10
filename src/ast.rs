@@ -152,13 +152,14 @@ impl<'a> Program<'a> {
                         line_number: for_line.line_number,
                     };
                     self.blocks.push(Block::Line {
-                        line_number: state.next_internal_line_number(),
+                        line_number: for_line.line_number,
                         statement_source: Span::new(CompleteStr("")),
                         statement: Statement::Let(LetStatement::Numeric {
                             variable: NumericVariable::Limit(limit),
                             expression: for_line.for_statement.limit,
                         }),
                     });
+                    state.index_for_level(for_line.line_number);
                     self.index_last_block()?;
 
                     // LET .. = increment
@@ -219,9 +220,10 @@ impl<'a> Program<'a> {
                         )],
                     };
 
-                    let after_next_line_number = state.next_internal_line_number();
+                    let continue_line_number = state.next_internal_line_number();
+                    let break_line_number = state.next_internal_line_number();
                     self.blocks.push(Block::Line {
-                        line_number: for_line.line_number,
+                        line_number: continue_line_number,
                         statement_source: for_line.statement_source,
                         statement: Statement::IfThen(
                             RelationalExpression::NumericComparison(
@@ -229,10 +231,9 @@ impl<'a> Program<'a> {
                                 Relation::GreaterThan,
                                 NumericExpression::with_constant(0.0),
                             ),
-                            after_next_line_number,
+                            break_line_number,
                         ),
                     });
-                    state.index_for_level(for_line.line_number);
                     self.index_last_block()?;
 
                     // add inner blocks recursively
@@ -265,17 +266,17 @@ impl<'a> Program<'a> {
                     state.index_for_level(next_line.line_number);
                     self.index_last_block()?;
 
-                    // GOTO [FOR line number]
+                    // GOTO continue_line_number
                     self.blocks.push(Block::Line {
                         line_number: state.next_internal_line_number(),
                         statement_source: next_line.statement_source,
-                        statement: Statement::Goto(for_line.line_number),
+                        statement: Statement::Goto(continue_line_number),
                     });
                     self.index_last_block()?;
 
                     // REM "continue after FOR block"
                     self.blocks.push(Block::Line {
-                        line_number: after_next_line_number,
+                        line_number: break_line_number,
                         statement_source: Span::new(CompleteStr("")),
                         statement: Statement::Rem,
                     });
