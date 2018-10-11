@@ -570,12 +570,29 @@ impl<'a> Interpreter<'a> {
     ) -> Result<f64, Error> {
         let variable = self.make_plain(variable, stderr)?;
         match variable {
-            PlainNumericVariable::Simple { .. } => Ok(self
-                .state
-                .numeric_values
-                .get(&variable)
-                .cloned()
-                .unwrap_or(0f64)),
+            PlainNumericVariable::Simple(v) => {
+                if v.digit.is_none() {
+                    if let Some(dim) = self.program.array_dims.get(&v.letter) {
+                        let info = if dim.dim2.is_some() {
+                            "it was previously used or DIM as a two-dimension array"
+                        } else {
+                            "it was previously used or DIM as a one-dimension array"
+                        };
+                        return Err(Error::TypeMismatch {
+                            src_line_number: self.state.current_line_number,
+                            variable: format!("{}", v.letter),
+                            info: info.into(),
+                        });
+                    }
+                }
+
+                Ok(self
+                    .state
+                    .numeric_values
+                    .get(&variable)
+                    .cloned()
+                    .unwrap_or(0f64))
+            }
             PlainNumericVariable::Increment(IncrementVariable { line_number })
             | PlainNumericVariable::Limit(LimitVariable { line_number }) => {
                 let res = self.state.numeric_values.get(&variable).cloned();
@@ -653,6 +670,22 @@ impl<'a> Interpreter<'a> {
         ar: &ArrayVariable,
         stderr: &mut W,
     ) -> Result<(PlainArrayVariable, usize), Error> {
+        if self
+            .state
+            .numeric_values
+            .get(&PlainNumericVariable::Simple(SimpleNumericVariable {
+                letter: ar.letter,
+                digit: None,
+            })).is_some()
+        {
+            let info = "it was previously used as a numeric variable";
+            return Err(Error::TypeMismatch {
+                src_line_number: self.state.current_line_number,
+                variable: format!("{}", ar.letter),
+                info: info.into(),
+            });
+        }
+
         let subscript1 = self
             .evaluate_numeric_expression(&ar.subscript.0, stderr)?
             .round() as isize;
@@ -682,9 +715,23 @@ impl<'a> Interpreter<'a> {
             });
         }
 
+        if ar.subscript.1.is_some() != dim.dim2.is_some() {
+            let info = if dim.dim2.is_some() {
+                "it was previously used or DIM as a two-dimension array"
+            } else {
+                "it was previously used or DIM as a one-dimension array"
+            };
+
+            return Err(Error::TypeMismatch {
+                src_line_number: self.state.current_line_number,
+                variable: format!("{}", ar.letter),
+                info: info.into(),
+            });
+        }
+
         let subscript2 = if let Some(ref v) = ar.subscript.1 {
             let subscript2 = self.evaluate_numeric_expression(v, stderr)?.round() as isize;
-            if subscript2 < base || subscript2 >= dim.dim2 as isize {
+            if subscript2 < base || subscript2 >= dim.dim2.unwrap_or(0) as isize {
                 return Err(Error::ArrayIndexOutOfRange {
                     src_line_number: self.state.current_line_number,
                     array: format!("{}(...,{})", ar.letter, subscript2),
