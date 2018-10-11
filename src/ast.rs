@@ -108,18 +108,12 @@ impl<'a> Program<'a> {
                             for decl in ar_decls {
                                 let dim = ArrayDimension {
                                     dim1: decl.bounds.0 as usize + 1,
-                                    dim2: decl.bounds.1.unwrap_or(0) as usize + 1,
+                                    dim2: decl.bounds.1.map(|d| d as usize + 1),
                                     offset: self.array_values_len,
                                 };
-                                let inserted = self.array_dims.insert(
-                                    decl.letter,
-                                    ArrayDimension {
-                                        dim1: decl.bounds.0 as usize + 1,
-                                        dim2: decl.bounds.1.unwrap_or(0) as usize + 1,
-                                        offset: self.array_values_len,
-                                    },
-                                );
-                                self.array_values_len += dim.len();
+                                let dim_len = dim.len();
+                                let inserted = self.array_dims.insert(decl.letter, dim);
+                                self.array_values_len += dim_len;
                                 if inserted.is_some() {
                                     panic!("duplicate array declaration"); // TODO: Replace with error
                                 }
@@ -134,17 +128,52 @@ impl<'a> Program<'a> {
                                 }),
                             ..
                         }) => {
-                            let dim = ArrayDimension {
-                                dim1: 11,
-                                dim2: subscript.1.as_ref().map(|_| 11).unwrap_or(1),
-                                offset: self.array_values_len,
-                            };
+                            let offset = self.array_values_len;
                             let mut offset_inc = 0;
-                            self.array_dims.entry(letter).or_insert_with(|| {
+                            let dim = self.array_dims.entry(letter).or_insert_with(|| {
+                                let dim = ArrayDimension {
+                                    dim1: 11,
+                                    dim2: subscript.1.as_ref().map(|_| 11),
+                                    offset,
+                                };
                                 offset_inc += dim.len();
                                 dim
                             });
+                            if subscript.1.is_some() != dim.dim2.is_some() {
+                                let info = if dim.dim2.is_some() {
+                                    "it was previously used or DIM as a two-dimension array"
+                                } else {
+                                    "it was previously used or DIM as a one-dimension array"
+                                };
+
+                                return Err(Error::TypeMismatch {
+                                    src_line_number: line_number,
+                                    variable: format!("{}", letter),
+                                    info: info.into(),
+                                });
+                            }
                             self.array_values_len += offset_inc;
+                        }
+                        Statement::Let(LetStatement::Numeric {
+                            variable:
+                                NumericVariable::Simple(SimpleNumericVariable {
+                                    letter,
+                                    digit: None,
+                                }),
+                            ..
+                        }) => {
+                            if let Some(dim) = self.array_dims.get(&letter) {
+                                let info = if dim.dim2.is_some() {
+                                    "it was previously used or DIM as a two-dimension array"
+                                } else {
+                                    "it was previously used or DIM as a one-dimension array"
+                                };
+                                return Err(Error::TypeMismatch {
+                                    src_line_number: line_number,
+                                    variable: format!("{}", letter),
+                                    info: info.into(),
+                                });
+                            }
                         }
                         Statement::OptionBase(base) => {
                             self.array_base = base;
@@ -885,12 +914,12 @@ impl Default for OptionBase {
 #[derive(Debug)]
 pub struct ArrayDimension {
     pub dim1: usize,
-    pub dim2: usize,
+    pub dim2: Option<usize>,
     pub offset: usize,
 }
 
 impl ArrayDimension {
     pub fn len(&self) -> usize {
-        self.dim1 * self.dim2
+        self.dim1 * self.dim2.unwrap_or(1)
     }
 }

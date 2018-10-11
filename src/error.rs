@@ -63,6 +63,11 @@ pub enum Error {
         src_line_number: u16,
         array: String,
     },
+    TypeMismatch {
+        src_line_number: u16,
+        variable: String,
+        info: String,
+    },
 }
 
 impl<'a> convert::From<nom::Err<Span<'a>>> for Error {
@@ -177,6 +182,15 @@ impl fmt::Display for Error {
                 f,
                 "{}: error: index out of range {}\n",
                 src_line_number, array
+            ),
+            Error::TypeMismatch {
+                src_line_number,
+                ref variable,
+                ref info,
+            } => write!(
+                f,
+                "{}: error: type mismatch for variable {}\n info: {}",
+                src_line_number, variable, info
             ),
         }
     }
