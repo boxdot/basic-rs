@@ -9,7 +9,7 @@ use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{BufRead, Write};
 
 pub struct Interpreter<'a> {
     program: &'a Program<'a>,
@@ -87,8 +87,9 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    pub fn evaluate<W: Write, V: Write>(
+    pub fn evaluate<R: BufRead, W: Write, V: Write>(
         mut self,
+        stdin: &mut R,
         stdout: &mut W,
         stderr: &mut V,
     ) -> Result<(), Error> {
@@ -102,7 +103,7 @@ impl<'a> Interpreter<'a> {
                 } => {
                     self.state.current_line_number = *line_number;
                     self.state.current_source_offset = statement_source.offset;
-                    self.evaluate_statement(statement, stdout, stderr)?
+                    self.evaluate_statement(statement, stdin, stdout, stderr)?
                 }
                 Block::For { .. } => {
                     panic!("logic error: FOR should be compiled to other statements")
@@ -158,9 +159,10 @@ impl<'a> Interpreter<'a> {
         Ok(())
     }
 
-    fn evaluate_statement<W: Write, V: Write>(
+    fn evaluate_statement<R: BufRead, W: Write, V: Write>(
         &mut self,
         statement: &Statement,
+        stdin: &mut R,
         stdout: &mut W,
         stderr: &mut V,
     ) -> Result<Action, Error> {
@@ -184,7 +186,37 @@ impl<'a> Interpreter<'a> {
                 }
             }
             Statement::Def(_) => Action::NextLine,
-            Statement::Input(_) => Action::NextLine,
+            Statement::Input(variables) => {
+                let mut buffer = String::new();
+                stdin.read_line(&mut buffer).unwrap();
+                let (_, constants) =
+                    parser::input_reply(parser::Span::new(CompleteStr(&buffer))).unwrap();
+                for (variable, constant) in variables.into_iter().zip(constants) {
+                    match (variable, constant) {
+                        (Variable::Numeric(v), ref c) => {
+                            // TODO: copy-pasta, extract in method
+                            let res =
+                                parser::numeric_constant(parser::Span::new(CompleteStr(&c.0)));
+                            match res {
+                                Ok((remaining, ref c)) if remaining.fragment.is_empty() => {
+                                    let value = self.evaluate_numeric_constant(c, stderr)?;
+                                    let v = self.make_plain(v, stderr)?;
+                                    self.state.numeric_values.insert(v, value);
+                                }
+                                _ => {
+                                    return Err(Error::ReadDatatypeMismatch {
+                                        src_line_number: self.state.current_line_number,
+                                    })
+                                }
+                            }
+                        }
+                        (Variable::String(v), ref c) => {
+                            self.state.string_values.insert(*v, c.0.trim().into());
+                        }
+                    }
+                }
+                Action::NextLine
+            }
             Statement::Read(variables) => {
                 self.evaluate_read(variables, stderr)?;
                 Action::NextLine

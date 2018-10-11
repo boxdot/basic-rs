@@ -603,6 +603,12 @@ pub struct OnGotoStatement {
 
 // 6. Constants
 
+#[derive(Debug, PartialEq)]
+pub enum Constant {
+    Numeric(NumericConstant),
+    String(StringConstant),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sign {
     Pos,
