@@ -192,6 +192,7 @@ impl<'a> Interpreter<'a> {
                 let (_, constants) =
                     parser::input_reply(parser::Span::new(CompleteStr(&buffer))).unwrap();
                 for (variable, constant) in variables.into_iter().zip(constants) {
+                    println!("Fitting {:?} in {:?}", constant, variable);
                     match (variable, constant) {
                         (Variable::Numeric(v), ref c) => {
                             // TODO: copy-pasta, extract in method

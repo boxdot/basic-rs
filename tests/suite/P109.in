@@ -1,0 +1,38 @@
+ABC,ABC
+"ABC",ABC
+ABC,DEF,ABC,DEF
+"ABC","DEF",ABC,DEF
+"ABC",DEF,ABC,DEF
+ABC,"DEF",ABC,DEF
+ABCDEFGHIJKLM,ABCDEFGHIJKLM
+NOPQRSTUVWXYZ,NOPQRSTUVWXYZ
++.     -,+.     -
+----5---10---15-18,----5---10---15-18
+   ABC,ABC
+ABC   ,ABC
+   ABC   ,ABC
+"   ABC",   ABC
+"ABC   ",ABC   
+"   ABC   ",   ABC   
+1,   "   ABC,    "    ,   ABC    
+3,   ABC  ,   "DEF",   ,  GHI  ,ABC,DEF,GHI
+ 1 ,  2  ,   3   ,1,2,3
+A   B,A   B
+   A   B   ,A   B
+1,   EIGHTEEN, POSITIONS   ,EIGHTEEN POSITIONS
+3,  A  B  ,  C , D  ,  E  F  ,A  B,C  D,E  F
+3,  A  B  ,,  "D"  ,  E  F  ,A  B,D,E  F
+ "A" , B C , "D" ,A,B C,D
+3,  "  A  B  "  ,, " C D " , E F ,  A  B  
+C D ,E F
+A,B,"C,D","E",A,B,C,D,E
+"",
+A,"",B,A,,B
+  A  ,  ""  ,  B  ,A,,B
+AB+3-5.6B,AB+3-5.6B
+-1.23,-1.23
++3-5 -8+6,+3-5 -8+6
+Q
+ABCDEFGHIJKLM,NOPQRSTUVWXYZ,0123456789
+!"$%&'()*+,-,./:;< >?^_,EMBEDDED SPACE
+Q
