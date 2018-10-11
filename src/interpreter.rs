@@ -184,6 +184,7 @@ impl<'a> Interpreter<'a> {
                 }
             }
             Statement::Def(_) => Action::NextLine,
+            Statement::Input(_) => Action::NextLine,
             Statement::Read(variables) => {
                 self.evaluate_read(variables, stderr)?;
                 Action::NextLine
@@ -275,8 +276,7 @@ impl<'a> Interpreter<'a> {
                 PrintItem::Semicolon => true,
                 PrintItem::Comma => true,
                 _ => false,
-            })
-            .unwrap_or(false);
+            }).unwrap_or(false);
         if !last_item_is_comma_or_semicolon {
             self.state.columnar_position = 0;
             write!(stdout, "\n");
@@ -733,8 +733,7 @@ impl<'a> Interpreter<'a> {
             .get(&PlainNumericVariable::Simple(SimpleNumericVariable {
                 letter: ar.letter,
                 digit: None,
-            }))
-            .is_some()
+            })).is_some()
         {
             let info = "it was previously used as a numeric variable";
             return Err(Error::TypeMismatch {
