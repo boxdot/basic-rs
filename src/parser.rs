@@ -164,6 +164,7 @@ named!(statement<Span, Statement>,
         print_statement |
         return_statement |
         stop_statement |
+        input_statement |
         read_statement |
         restore_statement |
         data_statement |
@@ -635,6 +636,19 @@ named!(print_separator<Span, PrintItem>,
         char!(',') => { |_| PrintItem::Comma } |
         char!(';') => { |_| PrintItem::Semicolon }
     )), space0));
+
+// 15. INPUT statement
+
+named!(input_statement<Span, Statement>,
+    do_parse!(
+        tag!("INPUT") >>
+        space >>
+        variables: separated_nonempty_list!(char!(','), variable) >>
+        (Statement::Input(variables))
+    )
+);
+
+// TODO: implement input-reply, see spec.
 
 // 16. READ and RESTORE statements
 

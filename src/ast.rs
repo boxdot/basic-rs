@@ -570,6 +570,7 @@ pub enum Statement {
     Gosub(u16),
     OnGoto(OnGotoStatement),
     IfThen(RelationalExpression, u16),
+    Input(Vec<Variable>),
     Read(Vec<Variable>),
     Data(Vec<Datum>),
     Restore,
