@@ -1,6 +1,8 @@
 extern crate basic;
 extern crate diff;
 
+use std::io::BufReader;
+
 macro_rules! try_test_program {
     ($name:ident) => {
         #[test]
@@ -9,6 +11,7 @@ macro_rules! try_test_program {
         fn $name() {
             run_and_compare_output(
                 include_str!(concat!("suite/", stringify!($name), ".BAS")),
+                "",
                 include_str!(concat!("suite/", stringify!($name), ".ok")),
                 include_str!(concat!("suite/", stringify!($name), ".eok")),
             );
@@ -23,6 +26,22 @@ macro_rules! test_program {
         fn $name() {
             run_and_compare_output(
                 include_str!(concat!("suite/", stringify!($name), ".BAS")),
+                "",
+                include_str!(concat!("suite/", stringify!($name), ".ok")),
+                include_str!(concat!("suite/", stringify!($name), ".eok")),
+            );
+        }
+    };
+}
+
+macro_rules! test_program_with_input {
+    ($name:ident) => {
+        #[test]
+        #[allow(non_snake_case)]
+        fn $name() {
+            run_and_compare_output(
+                include_str!(concat!("suite/", stringify!($name), ".BAS")),
+                include_str!(concat!("suite/", stringify!($name), ".in")),
                 include_str!(concat!("suite/", stringify!($name), ".ok")),
                 include_str!(concat!("suite/", stringify!($name), ".eok")),
             );
@@ -44,11 +63,21 @@ macro_rules! test_program_3x {
     };
 }
 
-fn run_and_compare_output(program: &str, expected_output: &str, expected_err_output: &str) {
+fn run_and_compare_output(
+    program: &str,
+    expected_input: &str,
+    expected_output: &str,
+    expected_err_output: &str,
+) {
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
 
-    let res = basic::execute(&program, &mut stdout, &mut stderr);
+    let res = basic::execute(
+        &program,
+        &mut BufReader::new(expected_input.as_bytes()),
+        &mut stdout,
+        &mut stderr,
+    );
 
     let output = String::from_utf8(stdout).unwrap();
     let mut err_output = String::from_utf8(stderr).unwrap();
@@ -80,7 +109,12 @@ fn run_and_compare_output_3x(program: &str, expected_output: &str, expected_err_
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
 
-    basic::execute(&program, &mut stdout, &mut stderr).expect("execute failed");
+    basic::execute(
+        &program,
+        &mut BufReader::new("".as_bytes()),
+        &mut stdout,
+        &mut stderr,
+    ).expect("execute failed");
     let output = String::from_utf8(stdout).unwrap();
     let err_output = String::from_utf8(stderr).unwrap();
 
@@ -102,7 +136,12 @@ fn run_and_compare_output_3x(program: &str, expected_output: &str, expected_err_
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
 
-        basic::execute(&program, &mut stdout, &mut stderr).expect("execute failed");
+        basic::execute(
+            &program,
+            &mut BufReader::new("".as_bytes()),
+            &mut stdout,
+            &mut stderr,
+        ).expect("execute failed");
 
         let next_output = String::from_utf8(stdout).unwrap();
         let next_err_output = String::from_utf8(stderr).unwrap();
@@ -243,7 +282,7 @@ test_program!(P105);
 test_program!(P106);
 try_test_program!(P107);
 try_test_program!(P108);
-// try_test_program!(P109); TODO: enable again once INPUT is interpreted
+test_program_with_input!(P109);
 try_test_program!(P110);
 try_test_program!(P111);
 try_test_program!(P112);
