@@ -17,10 +17,11 @@ use nom::types::CompleteStr;
 
 pub use error::Error;
 
-use std::io::Write;
+use std::io::{BufRead, Write};
 
-pub fn execute<W: Write, V: Write>(
+pub fn execute<R: BufRead, W: Write, V: Write>(
     input: &str,
+    stdin: &mut R,
     stdout: &mut W,
     stderr: &mut V,
 ) -> Result<(), Error> {
@@ -33,7 +34,7 @@ pub fn execute<W: Write, V: Write>(
             } else {
                 let ast = ast?;
                 let interpreter = Interpreter::new(&ast, input);
-                interpreter.evaluate(stdout, stderr)?;
+                interpreter.evaluate(stdin, stdout, stderr)?;
                 Ok(())
             }
         }
