@@ -183,6 +183,7 @@ impl<'a> Interpreter<'a> {
                     Action::NextLine
                 }
             }
+            Statement::Def(_) => unimplemented!(),
             Statement::Read(variables) => {
                 self.evaluate_read(variables, stderr)?;
                 Action::NextLine
@@ -501,6 +502,7 @@ impl<'a> Interpreter<'a> {
             Primary::Constant(c) => self.evaluate_numeric_constant(c, stderr)?,
             Primary::Function(f) => self.evaluate_function(f, stderr)?,
             Primary::Expression(e) => self.evaluate_numeric_expression(e, stderr)?,
+            Primary::DefFunctionCall(_) => unimplemented!(),
         };
         Ok(value)
     }

@@ -289,7 +289,7 @@ try_test_program!(P151);
 try_test_program!(P152);
 try_test_program!(P153);
 try_test_program!(P154);
-try_test_program!(P155);
+test_program!(P155);
 try_test_program!(P156);
 try_test_program!(P157);
 try_test_program!(P158);
