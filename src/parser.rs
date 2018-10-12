@@ -369,23 +369,6 @@ named!(numeric_let_statement<Span, LetStatement>,
         (LetStatement::Numeric{ variable, expression })
     ));
 
-/// Finds position of constant in let statement when generating a warning.
-pub fn let_statement_numeric_constant_pos<'a>(statement: &'a str) -> IResult<Span<'a>, Span<'a>> {
-    named!(parse<Span, Span>,
-        do_parse!(
-            tag!("LET") >> space >>
-            numeric_variable >>
-            space0 >>
-            tag!("=") >>
-            space0 >>
-            opt!(sign) >> // we need position after sign if there is any
-            position: position!() >>
-            numeric_expression >>
-            (position)
-        ));
-    parse(Span::new(CompleteStr(statement)))
-}
-
 named!(string_let_statement<Span, LetStatement>,
     do_parse!(
         tag!("LET") >> space >>
