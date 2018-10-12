@@ -115,7 +115,11 @@ impl<'a> Program<'a> {
                                 let inserted = self.array_dims.insert(decl.letter, dim);
                                 self.array_values_len += dim_len;
                                 if inserted.is_some() {
-                                    panic!("duplicate array declaration"); // TODO: Replace with error
+                                    return Err(Error::Redimensioned {
+                                        src_line_number: line_number,
+                                        variable: decl.letter,
+                                        bounds: decl.bounds,
+                                    });
                                 }
                             }
                             replace_by_rem = true;
