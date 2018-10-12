@@ -274,7 +274,8 @@ impl<'a> Interpreter<'a> {
                 PrintItem::Semicolon => true,
                 PrintItem::Comma => true,
                 _ => false,
-            }).unwrap_or(false);
+            })
+            .unwrap_or(false);
         if !last_item_is_comma_or_semicolon {
             self.state.columnar_position = 0;
             write!(stdout, "\n");
@@ -411,8 +412,16 @@ impl<'a> Interpreter<'a> {
                     match res {
                         Ok((remaining, ref c)) if remaining.fragment.is_empty() => {
                             let value = self.evaluate_numeric_constant(c, stderr)?;
-                            let v = self.make_plain(v, stderr)?;
-                            self.state.numeric_values.insert(v, value);
+                            match v {
+                                NumericVariable::Array(ar) => {
+                                    let (_, index) = self.make_array_plain(ar, stderr)?;
+                                    self.state.array_values[index] = value;
+                                }
+                                _ => {
+                                    let v = self.make_plain(v, stderr)?;
+                                    self.state.numeric_values.insert(v, value);
+                                }
+                            }
                         }
                         _ => {
                             return Err(Error::ReadDatatypeMismatch {
@@ -676,7 +685,8 @@ impl<'a> Interpreter<'a> {
             .get(&PlainNumericVariable::Simple(SimpleNumericVariable {
                 letter: ar.letter,
                 digit: None,
-            })).is_some()
+            }))
+            .is_some()
         {
             let info = "it was previously used as a numeric variable";
             return Err(Error::TypeMismatch {
