@@ -77,6 +77,11 @@ pub enum Error {
         src_line_number: u16,
         base: usize,
     },
+    UndefinedFunction {
+        src_line_number: u16,
+        name: char,
+        statement_source: String,
+    },
 }
 
 impl<'a> convert::From<nom::Err<Span<'a>>> for Error {
@@ -227,6 +232,33 @@ impl fmt::Display for Error {
                 "{}: error: OPTION used after arrays used or DIM \n OPTION BASE {}\n ^\n",
                 src_line_number, base,
             ),
+            Error::UndefinedFunction {
+                src_line_number,
+                name,
+                ref statement_source,
+            } => {
+                let fn_name = format!("FN{}", name);
+                let cursor = statement_source
+                    .find(&fn_name)
+                    .and_then(|pos| {
+                        // search for the second position, since the first is the definition of
+                        // the function
+                        let start = pos + fn_name.len();
+                        statement_source[start..]
+                            .find(&fn_name)
+                            .map(|pos| pos + start)
+                    })
+                    .unwrap_or(0);
+                write!(
+                    f,
+                    "{}: error: undefined function {}\n {}\n{:cursor$}^\n",
+                    src_line_number,
+                    fn_name,
+                    statement_source,
+                    "",
+                    cursor = cursor + 1
+                )
+            }
         }
     }
 }
