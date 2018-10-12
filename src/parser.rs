@@ -631,12 +631,15 @@ named!(data_statement<Span, Statement>,
         (Statement::Data(data))
     ));
 
-named!(data_list<Span, Vec<StringConstant>>,
+named!(data_list<Span, Vec<Datum>>,
     separated_nonempty_list!(
         delimited!(space0, char!(','), space0), datum));
 
-named!(datum<Span, StringConstant>,
-    alt!(map!(unquoted_string, StringConstant) | string_constant));
+named!(datum<Span, Datum>,
+    alt!(
+        map!(unquoted_string, |s| Datum::Unquoted(StringConstant(s))) |
+        map!(string_constant, Datum::Quoted)
+    ));
 
 // 18. ARRAY declarations
 
