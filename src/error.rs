@@ -73,6 +73,10 @@ pub enum Error {
         variable: char,
         bounds: (u64, Option<u64>),
     },
+    InvalidOptionBase {
+        src_line_number: u16,
+        base: usize,
+    },
 }
 
 impl<'a> convert::From<nom::Err<Span<'a>>> for Error {
@@ -215,6 +219,14 @@ impl fmt::Display for Error {
                     bounds = bounds
                 )
             }
+            Error::InvalidOptionBase {
+                src_line_number,
+                base,
+            } => write!(
+                f,
+                "{}: error: OPTION used after arrays used or DIM \n OPTION BASE {}\n ^\n",
+                src_line_number, base,
+            ),
         }
     }
 }

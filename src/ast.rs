@@ -180,6 +180,13 @@ impl<'a> Program<'a> {
                             }
                         }
                         Statement::OptionBase(base) => {
+                            if !self.array_dims.is_empty() {
+                                return Err(Error::InvalidOptionBase {
+                                    src_line_number: line_number,
+                                    base: base as usize,
+                                });
+                            }
+
                             self.array_base = base;
                             replace_by_rem = true;
                         }
