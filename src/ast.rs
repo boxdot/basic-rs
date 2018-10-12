@@ -14,7 +14,7 @@ const FIRST_INTERNAL_LINE_NUMBER: u16 = 10001;
 pub struct Program<'a> {
     pub blocks: Vec<Block<'a>>,
     block_index: HashMap<u16, usize>,
-    pub data: Vec<StringConstant>,
+    pub data: Vec<Datum>,
     pub array_dims: HashMap<char, ArrayDimension>,
     pub array_values_len: usize,
     pub array_base: OptionBase,
@@ -537,7 +537,7 @@ pub enum Statement {
     OnGoto(OnGotoStatement),
     IfThen(RelationalExpression, u16),
     Read(Vec<Variable>),
-    Data(Vec<StringConstant>),
+    Data(Vec<Datum>),
     Restore,
     Rem,
     Return,
@@ -900,6 +900,22 @@ pub fn new_print_items(
         res.push(item);
     }
     res
+}
+
+// 17. DATA statement
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Datum {
+    Quoted(StringConstant),
+    Unquoted(StringConstant),
+}
+
+impl AsRef<str> for Datum {
+    fn as_ref(&self) -> &str {
+        match self {
+            Datum::Quoted(s) | Datum::Unquoted(s) => &s.0,
+        }
+    }
 }
 
 // 18. ARRAY declarations

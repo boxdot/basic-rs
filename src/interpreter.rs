@@ -401,14 +401,14 @@ impl<'a> Interpreter<'a> {
                 .ok_or_else(|| Error::InsufficientData {
                     src_line_number: self.state.current_line_number,
                 })?;
-            match variable {
-                Variable::String(v) => {
-                    self.state.string_values.insert(*v, datum.0.clone());
+            match (variable, datum) {
+                (Variable::String(v), datum) => {
+                    self.state.string_values.insert(*v, datum.as_ref().into());
                 }
-                Variable::Numeric(v) => {
+                (Variable::Numeric(v), Datum::Unquoted(s)) => {
                     // FIXME: After reading unquoted string, we should try to parse it as
                     // numeric variable again, and store its value in datum.
-                    let res = parser::numeric_constant(parser::Span::new(CompleteStr(&datum.0)));
+                    let res = parser::numeric_constant(parser::Span::new(CompleteStr(&s.0)));
                     match res {
                         Ok((remaining, ref c)) if remaining.fragment.is_empty() => {
                             let value = self.evaluate_numeric_constant(c, stderr)?;
@@ -429,6 +429,11 @@ impl<'a> Interpreter<'a> {
                             })
                         }
                     }
+                }
+                _ => {
+                    return Err(Error::ReadDatatypeMismatch {
+                        src_line_number: self.state.current_line_number,
+                    })
                 }
             }
             self.state.data_pointer += 1;
