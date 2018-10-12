@@ -570,8 +570,13 @@ impl<'a> Interpreter<'a> {
         let c = constant.sign * constant.significand * 10f64.powi(constant.exrad);
         if c.is_infinite() {
             let line = self.get_source_line(self.state.current_source_offset);
-            let (_, span) = parser::let_statement_numeric_constant_pos(line).expect("parser bug");
-            self.warn_with_cursor(stderr, "numeric constant overflow ", span.offset);
+            let significand = format!("{}", constant.significand as usize);
+            let cursor = line.find(&significand);
+            if let Some(cursor) = cursor {
+                self.warn_with_cursor(stderr, "numeric constant overflow ", cursor);
+            } else {
+                self.warn(stderr, "numeric constant overflow ");
+            }
         }
         Ok(c)
     }
