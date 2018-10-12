@@ -68,6 +68,11 @@ pub enum Error {
         variable: String,
         info: String,
     },
+    Redimensioned {
+        src_line_number: u16,
+        variable: char,
+        bounds: (u64, Option<u64>),
+    },
 }
 
 impl<'a> convert::From<nom::Err<Span<'a>>> for Error {
@@ -192,6 +197,24 @@ impl fmt::Display for Error {
                 "{}: error: type mismatch for variable {}\n info: {}",
                 src_line_number, variable, info
             ),
+            Error::Redimensioned {
+                src_line_number,
+                variable,
+                bounds,
+            } => {
+                let bounds = if let (dim1, Some(dim2)) = bounds {
+                    format!("({},{})", dim1, dim2)
+                } else {
+                    format!("({})", bounds.0)
+                };
+                write!(
+                    f,
+                    "{}: error: redimensioned variable {variable}\n DIM {variable}{bounds}\n     ^\n",
+                    src_line_number,
+                    variable = variable,
+                    bounds = bounds
+                )
+            }
         }
     }
 }

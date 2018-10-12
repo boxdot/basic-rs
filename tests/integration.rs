@@ -130,7 +130,8 @@ fn diff(from: &str, to: &str) -> String {
             diff::Result::Left(s) => Some(format!("+ {}", s)),
             diff::Result::Right(s) => Some(format!("- {}", s)),
             diff::Result::Both(_, _) => None,
-        }).collect();
+        })
+        .collect();
     diff_lines.join("\n")
 }
 
@@ -216,7 +217,7 @@ try_test_program!(P079);
 try_test_program!(P080);
 try_test_program!(P081);
 try_test_program!(P082);
-try_test_program!(P083);
+test_program!(P083);
 try_test_program!(P084);
 test_program!(P085);
 test_program!(P086);
