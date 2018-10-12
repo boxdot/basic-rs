@@ -531,6 +531,7 @@ pub enum RelationalExpression {
 #[derive(Debug, PartialEq)]
 pub enum Statement {
     Print(PrintStatement),
+    Def(DefFunction),
     Let(LetStatement),
     Goto(u16),
     Gosub(u16),
@@ -812,6 +813,7 @@ pub enum Primary {
     Variable(NumericVariable),
     Constant(NumericConstant),
     Function(Function),
+    DefFunctionCall(DefFunctionCall),
     Expression(NumericExpression),
 }
 
@@ -836,6 +838,21 @@ pub enum Function {
     Sin(NumericExpression),
     Sqr(NumericExpression),
     Tan(NumericExpression),
+}
+
+// 10. User defined functions
+
+#[derive(Debug, PartialEq)]
+pub struct DefFunction {
+    pub name: char,
+    pub parameter: Option<SimpleNumericVariable>,
+    pub expression: NumericExpression,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct DefFunctionCall {
+    pub name: char,
+    pub arg: Option<NumericExpression>,
 }
 
 // 11. LET statement

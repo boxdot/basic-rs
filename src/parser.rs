@@ -159,6 +159,7 @@ named!(statement<Span, Statement>,
         gosub_statement |
         on_goto_statement |
         if_then_statement |
+        def_statement |
         let_statement |
         print_statement |
         return_statement |
@@ -328,6 +329,7 @@ named!(multiplier<Span, Multiplier>,
 named!(primary<Span, Primary>,
     alt!(
         map!(numeric_function_ref, Primary::Function) |
+        map!(numeric_defined_function_ref, Primary::DefFunctionCall) |
         map!(numeric_variable, Primary::Variable) |
         numeric_rep => { |value| Primary::Constant(NumericConstant::from(value)) } |
         map!(delimited!(char!('('), numeric_expression, char!(')')), Primary::Expression)
@@ -346,6 +348,11 @@ named!(numeric_function_ref<Span, Function>,
         pair!(tag!("SIN"), argument_list) => { |(_, arg)| Function::Sin(arg) } |
         pair!(tag!("SQR"), argument_list) => { |(_, arg)| Function::Sqr(arg) } |
         pair!(tag!("TAN"), argument_list) => { |(_, arg)| Function::Tan(arg) }
+    ));
+
+named!(numeric_defined_function_ref<Span, DefFunctionCall>,
+    map!(pair!(numeric_defined_function, opt!(argument_list)),
+        |(f, arg)| { DefFunctionCall { name: f, arg } }
     ));
 
 named!(argument_list<Span, NumericExpression>,
@@ -376,6 +383,28 @@ named!(equality_relation<Span, EqualityRelation>,
         tag!("<>") => { |_| EqualityRelation::NotEqualTo }
     )
 );
+
+// 10. User defined functions
+
+named!(def_statement<Span, Statement>,
+    do_parse!(
+        tag!("DEF") >>
+        space >>
+        name: numeric_defined_function >>
+        parameter: opt!(delimited!(char!('('), simple_numeric_variable, char!(')'))) >>
+        space0 >>
+        char!('=') >>
+        space0 >>
+        expression: numeric_expression >>
+        (Statement::Def(DefFunction{
+            name,
+            parameter,
+            expression
+        }))
+    ));
+
+named!(numeric_defined_function<Span, char>,
+    preceded!(tag!("FN"), letter));
 
 // 11. LET statement
 
