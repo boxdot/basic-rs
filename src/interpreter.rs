@@ -183,7 +183,7 @@ impl<'a> Interpreter<'a> {
                     Action::NextLine
                 }
             }
-            Statement::Def(_) => unimplemented!(),
+            Statement::Def(_) => Action::NextLine,
             Statement::Read(variables) => {
                 self.evaluate_read(variables, stderr)?;
                 Action::NextLine
@@ -502,7 +502,7 @@ impl<'a> Interpreter<'a> {
             Primary::Constant(c) => self.evaluate_numeric_constant(c, stderr)?,
             Primary::Function(f) => self.evaluate_function(f, stderr)?,
             Primary::Expression(e) => self.evaluate_numeric_expression(e, stderr)?,
-            Primary::DefFunctionCall(_) => unimplemented!(),
+            Primary::DefFunctionCall(f) => self.evaluate_def_function_call(f, stderr)?,
         };
         Ok(value)
     }
@@ -576,6 +576,47 @@ impl<'a> Interpreter<'a> {
             Function::Tan(expr) => self
                 .evaluate_numeric_expression(expr, stderr)
                 .map(|value| value.tan()),
+        }
+    }
+
+    fn evaluate_def_function_call<W: Write>(
+        &mut self,
+        f: &DefFunctionCall,
+        stderr: &mut W,
+    ) -> Result<f64, Error> {
+        let line_number = self.program.fn_translation_table[Program::letter_address(f.name)];
+        let block = self.program.get_block_by_line_number(line_number).unwrap(); //handle error
+        match block {
+            Block::Line {
+                statement:
+                    Statement::Def(DefFunction {
+                        name: ref_name,
+                        parameter,
+                        expression: f_body,
+                    }),
+                ..
+            } => {
+                assert_eq!(f.name, *ref_name); // handle error
+                assert_eq!(parameter.is_some(), f.arg.is_some()); // handle error
+
+                if let Some(parameter) = parameter {
+                    let arg_value =
+                        self.evaluate_numeric_expression(f.arg.as_ref().unwrap(), stderr)?;
+                    let param_var = PlainNumericVariable::Simple(*parameter);
+                    let prev_value = self.state.numeric_values.insert(param_var, arg_value);
+                    let value = self.evaluate_numeric_expression(f_body, stderr)?;
+                    if let Some(value) = prev_value {
+                        self.state.numeric_values.insert(param_var, value);
+                    } else {
+                        self.state.numeric_values.remove(&param_var);
+                    }
+
+                    Ok(value)
+                } else {
+                    self.evaluate_numeric_expression(f_body, stderr)
+                }
+            }
+            _ => panic!("invalid function reference"), // handle error
         }
     }
 

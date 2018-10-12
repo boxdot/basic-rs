@@ -18,6 +18,7 @@ pub struct Program<'a> {
     pub array_dims: HashMap<char, ArrayDimension>,
     pub array_values_len: usize,
     pub array_base: OptionBase,
+    pub fn_translation_table: [u16; 26],
 }
 
 impl<'a> Program<'a> {
@@ -40,7 +41,11 @@ impl<'a> Program<'a> {
                     line_numbers: line_numbers.collect(),
                 })
             } else {
-                let mut program = Program::default();
+                let mut program = Program {
+                    fn_translation_table: [FIRST_INTERNAL_LINE_NUMBER; 26],
+                    ..Program::default()
+                };
+
                 let mut builder_state = ProgramBuilderState::default();
                 program.build(blocks, &mut builder_state)?;
                 program.validate(&builder_state, source_code)?;
@@ -189,6 +194,9 @@ impl<'a> Program<'a> {
 
                             self.array_base = base;
                             replace_by_rem = true;
+                        }
+                        Statement::Def(DefFunction { name, .. }) => {
+                            self.fn_translation_table[Self::letter_address(name)] = line_number;
                         }
                         _ => (),
                     };
@@ -445,12 +453,37 @@ impl<'a> Program<'a> {
                             check_line_number(*ref_line_number, *line_number, statement_source)?;
                         }
                     }
+                    Statement::Def(DefFunction {
+                        name, expression, ..
+                    }) => {
+                        let mut fns = Vec::new();
+                        expression.function_calls(&mut fns);
+                        if fns.iter().position(|f| f == name).is_some() {
+                            let statement_source = source_code[statement_source.offset..]
+                                .lines()
+                                .next()
+                                .unwrap()
+                                .into();
+                            return Err(Error::UndefinedFunction {
+                                src_line_number: *line_number,
+                                name: *name,
+                                statement_source,
+                            });
+                        }
+                    }
                     _ => (),
                 },
                 _ => (),
             }
         }
         Ok(())
+    }
+
+    pub fn letter_address(letter: char) -> usize {
+        match letter {
+            'A'..='Z' => letter as usize - 'A' as usize,
+            _ => panic!("invalid letter"),
+        }
     }
 }
 
@@ -750,6 +783,12 @@ impl NumericExpression {
             vec![],
         )
     }
+
+    pub fn function_calls(&self, result: &mut Vec<char>) {
+        for (_, t) in &self.terms {
+            t.function_calls(result);
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -767,6 +806,13 @@ impl Term {
         Self {
             factor: Factor::with_variable(variable),
             factors: Vec::new(),
+        }
+    }
+
+    pub fn function_calls(&self, result: &mut Vec<char>) {
+        self.factor.function_calls(result);
+        for (_, f) in &self.factors {
+            f.function_calls(result);
         }
     }
 }
@@ -800,6 +846,12 @@ impl Factor {
             primaries: vec![Primary::Function(f)],
         }
     }
+
+    pub fn function_calls(&self, result: &mut Vec<char>) {
+        for p in &self.primaries {
+            p.function_calls(result);
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -815,6 +867,16 @@ pub enum Primary {
     Function(Function),
     DefFunctionCall(DefFunctionCall),
     Expression(NumericExpression),
+}
+
+impl Primary {
+    pub fn function_calls(&self, result: &mut Vec<char>) {
+        match self {
+            Primary::DefFunctionCall(DefFunctionCall { name, .. }) => result.push(*name),
+            Primary::Expression(e) => e.function_calls(result),
+            _ => (),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
