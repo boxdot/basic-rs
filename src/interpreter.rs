@@ -189,32 +189,12 @@ impl<'a> Interpreter<'a> {
             Statement::Input(variables) => {
                 let mut buffer = String::new();
                 stdin.read_line(&mut buffer).unwrap();
-                let (_, constants) =
-                    parser::input_reply(parser::Span::new(CompleteStr(&buffer))).unwrap();
-                for (variable, constant) in variables.into_iter().zip(constants) {
-                    println!("Fitting {:?} in {:?}", constant, variable);
-                    match (variable, constant) {
-                        (Variable::Numeric(v), ref c) => {
-                            // TODO: copy-pasta, extract in method
-                            let res =
-                                parser::numeric_constant(parser::Span::new(CompleteStr(&c.0)));
-                            match res {
-                                Ok((remaining, ref c)) if remaining.fragment.is_empty() => {
-                                    let value = self.evaluate_numeric_constant(c, stderr)?;
-                                    let v = self.make_plain(v, stderr)?;
-                                    self.state.numeric_values.insert(v, value);
-                                }
-                                _ => {
-                                    return Err(Error::ReadDatatypeMismatch {
-                                        src_line_number: self.state.current_line_number,
-                                    })
-                                }
-                            }
-                        }
-                        (Variable::String(v), ref c) => {
-                            self.state.string_values.insert(*v, c.0.trim().into());
-                        }
-                    }
+                let (_, constants) = parser::input_reply(parser::Span::new(CompleteStr(&buffer)))
+                    .map_err(|_| Error::InsufficientInput {
+                    src_line_number: self.state.current_line_number,
+                })?;
+                for (variable, datum) in variables.into_iter().zip(constants) {
+                    self.assign_variable_from_datum(variable, &datum, stderr)?;
                 }
                 Action::NextLine
             }
@@ -309,7 +289,8 @@ impl<'a> Interpreter<'a> {
                 PrintItem::Semicolon => true,
                 PrintItem::Comma => true,
                 _ => false,
-            }).unwrap_or(false);
+            })
+            .unwrap_or(false);
         if !last_item_is_comma_or_semicolon {
             self.state.columnar_position = 0;
             write!(stdout, "\n");
@@ -435,41 +416,7 @@ impl<'a> Interpreter<'a> {
                 .ok_or_else(|| Error::InsufficientData {
                     src_line_number: self.state.current_line_number,
                 })?;
-            match (variable, datum) {
-                (Variable::String(v), datum) => {
-                    self.state.string_values.insert(*v, datum.as_ref().into());
-                }
-                (Variable::Numeric(v), Datum::Unquoted(s)) => {
-                    // FIXME: After reading unquoted string, we should try to parse it as
-                    // numeric variable again, and store its value in datum.
-                    let res = parser::numeric_constant(parser::Span::new(CompleteStr(&s.0)));
-                    match res {
-                        Ok((remaining, ref c)) if remaining.fragment.is_empty() => {
-                            let value = self.evaluate_numeric_constant(c, stderr)?;
-                            match v {
-                                NumericVariable::Array(ar) => {
-                                    let (_, index) = self.make_array_plain(ar, stderr)?;
-                                    self.state.array_values[index] = value;
-                                }
-                                _ => {
-                                    let v = self.make_plain(v, stderr)?;
-                                    self.state.numeric_values.insert(v, value);
-                                }
-                            }
-                        }
-                        _ => {
-                            return Err(Error::ReadDatatypeMismatch {
-                                src_line_number: self.state.current_line_number,
-                            })
-                        }
-                    }
-                }
-                _ => {
-                    return Err(Error::ReadDatatypeMismatch {
-                        src_line_number: self.state.current_line_number,
-                    })
-                }
-            }
+            self.assign_variable_from_datum(variable, datum, stderr)?;
             self.state.data_pointer += 1;
         }
         Ok(())
@@ -739,6 +686,50 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    fn assign_variable_from_datum<W: Write>(
+        &mut self,
+        variable: &Variable,
+        datum: &Datum,
+        stderr: &mut W,
+    ) -> Result<(), Error> {
+        match (variable, datum) {
+            (Variable::String(v), datum) => {
+                self.state.string_values.insert(*v, datum.as_ref().into());
+            }
+            (Variable::Numeric(v), Datum::Unquoted(s)) => {
+                // FIXME: After reading unquoted string, we should try to parse it as
+                // numeric variable again, and store its value in datum.
+                let res = parser::numeric_constant(parser::Span::new(CompleteStr(&s.0)));
+                match res {
+                    Ok((remaining, ref c)) if remaining.fragment.is_empty() => {
+                        let value = self.evaluate_numeric_constant(c, stderr)?;
+                        match v {
+                            NumericVariable::Array(ar) => {
+                                let (_, index) = self.make_array_plain(ar, stderr)?;
+                                self.state.array_values[index] = value;
+                            }
+                            _ => {
+                                let v = self.make_plain(v, stderr)?;
+                                self.state.numeric_values.insert(v, value);
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(Error::ReadDatatypeMismatch {
+                            src_line_number: self.state.current_line_number,
+                        })
+                    }
+                }
+            }
+            _ => {
+                return Err(Error::ReadDatatypeMismatch {
+                    src_line_number: self.state.current_line_number,
+                })
+            }
+        }
+        Ok(())
+    }
+
     fn make_plain<W: Write>(
         &mut self,
         variable: &NumericVariable,
@@ -766,7 +757,8 @@ impl<'a> Interpreter<'a> {
             .get(&PlainNumericVariable::Simple(SimpleNumericVariable {
                 letter: ar.letter,
                 digit: None,
-            })).is_some()
+            }))
+            .is_some()
         {
             let info = "it was previously used as a numeric variable";
             return Err(Error::TypeMismatch {
