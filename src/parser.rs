@@ -648,9 +648,9 @@ named!(input_statement<Span, Statement>,
     )
 );
 
-named!(pub input_reply<Span, Vec<StringConstant>>,
+named!(pub input_reply<Span, Vec<Datum>>,
     separated_nonempty_list!(
-        delimited!(space0, char!(','), space0), datum));
+        char!(','), delimited!(space0, datum, space0)));
 
 // 16. READ and RESTORE statements
 

@@ -82,6 +82,9 @@ pub enum Error {
         name: char,
         statement_source: String,
     },
+    InsufficientInput {
+        src_line_number: u16,
+    },
 }
 
 impl<'a> convert::From<nom::Err<Span<'a>>> for Error {
@@ -247,8 +250,7 @@ impl fmt::Display for Error {
                         statement_source[start..]
                             .find(&fn_name)
                             .map(|pos| pos + start)
-                    })
-                    .unwrap_or(0);
+                    }).unwrap_or(0);
                 write!(
                     f,
                     "{}: error: undefined function {}\n {}\n{:cursor$}^\n",
@@ -258,6 +260,9 @@ impl fmt::Display for Error {
                     "",
                     cursor = cursor + 1
                 )
+            }
+            Error::InsufficientInput { src_line_number } => {
+                write!(f, "{}: error: insufficient INPUT\n", src_line_number,)
             }
         }
     }
