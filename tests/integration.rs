@@ -378,7 +378,7 @@ try_test_program!(P199);
 try_test_program!(P200);
 try_test_program!(P201);
 test_program!(P202);
-// try_test_program!(P203); TODO: enable again after INPUT
+try_test_program!(P203);
 try_test_program!(P204);
 try_test_program!(P205);
 try_test_program!(P206);
