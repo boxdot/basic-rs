@@ -114,7 +114,8 @@ fn run_and_compare_output_3x(program: &str, expected_output: &str, expected_err_
         &mut BufReader::new("".as_bytes()),
         &mut stdout,
         &mut stderr,
-    ).expect("execute failed");
+    )
+    .expect("execute failed");
     let output = String::from_utf8(stdout).unwrap();
     let err_output = String::from_utf8(stderr).unwrap();
 
@@ -141,7 +142,8 @@ fn run_and_compare_output_3x(program: &str, expected_output: &str, expected_err_
             &mut BufReader::new("".as_bytes()),
             &mut stdout,
             &mut stderr,
-        ).expect("execute failed");
+        )
+        .expect("execute failed");
 
         let next_output = String::from_utf8(stdout).unwrap();
         let next_err_output = String::from_utf8(stderr).unwrap();
@@ -169,7 +171,8 @@ fn diff(from: &str, to: &str) -> String {
             diff::Result::Left(s) => Some(format!("+ {}", s)),
             diff::Result::Right(s) => Some(format!("- {}", s)),
             diff::Result::Both(_, _) => None,
-        }).collect();
+        })
+        .collect();
     diff_lines.join("\n")
 }
 
@@ -245,7 +248,7 @@ test_program!(P069);
 test_program!(P070);
 test_program!(P071);
 test_program!(P072);
-try_test_program!(P073);
+test_program!(P073);
 try_test_program!(P074);
 try_test_program!(P075);
 try_test_program!(P076);

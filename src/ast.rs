@@ -47,7 +47,7 @@ impl<'a> Program<'a> {
                 };
 
                 let mut builder_state = ProgramBuilderState::default();
-                program.build(blocks, &mut builder_state)?;
+                program.build(blocks, &mut builder_state, source_code)?;
                 program.validate(&builder_state, source_code)?;
                 Ok(program)
             }
@@ -89,6 +89,7 @@ impl<'a> Program<'a> {
         &mut self,
         blocks: Vec<Block<'a>>,
         state: &mut ProgramBuilderState,
+        source_code: &str,
     ) -> Result<(), Error> {
         // 1. Create index of all blocks.
         // 2. Move out all data block into `data`.
@@ -117,6 +118,33 @@ impl<'a> Program<'a> {
                                     offset: self.array_values_len,
                                 };
                                 let dim_len = dim.len();
+
+                                if dim.dim1 < self.array_base as usize + 1 {
+                                    return Err(Error::InvalidDimSubscript {
+                                        src_line_number: line_number,
+                                        subscript: dim.dim1 - 1,
+                                        statement_source: source_code[statement_source.offset..]
+                                            .lines()
+                                            .next()
+                                            .unwrap()
+                                            .into(),
+                                    });
+                                } else if dim
+                                    .dim2
+                                    .map(|d| d < self.array_base as usize + 1)
+                                    .unwrap_or(false)
+                                {
+                                    return Err(Error::InvalidDimSubscript {
+                                        src_line_number: line_number,
+                                        subscript: dim.dim2.unwrap() - 1,
+                                        statement_source: source_code[statement_source.offset..]
+                                            .lines()
+                                            .next()
+                                            .unwrap()
+                                            .into(),
+                                    });
+                                }
+
                                 let inserted = self.array_dims.insert(decl.letter, dim);
                                 self.array_values_len += dim_len;
                                 if inserted.is_some() {
@@ -343,7 +371,7 @@ impl<'a> Program<'a> {
                     self.index_last_block()?;
 
                     // add inner blocks recursively
-                    self.build(blocks, state)?;
+                    self.build(blocks, state, source_code)?;
 
                     state.for_control_variables_stack.remove(&control_variable);
 
