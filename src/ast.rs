@@ -103,6 +103,11 @@ impl<'a> Program<'a> {
         })
     }
 
+    /// Validation that can be only made after the whole program was built.
+    ///
+    /// Validations:
+    ///
+    /// * Check for valid line numbers in statements refering such.
     fn validate(&self, source_code: &str) -> Result<(), Error> {
         let check_valid_line_number = |ref_line_number, line_number, statement_source: &Span| {
             if self.block_index.get(&ref_line_number).is_none() {
