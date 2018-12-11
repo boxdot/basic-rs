@@ -29,7 +29,7 @@ pub fn execute<R: BufRead, W: Write, V: Write>(
     match res {
         Ok((remaining, ast)) => {
             if !remaining.fragment.is_empty() {
-                write!(stderr, "{}", error::format_remaining(&remaining.fragment)?);
+                write!(stderr, "{}", error::format_remaining(&remaining.fragment)?)?;
                 Ok(())
             } else {
                 let ast = ast?;
@@ -40,7 +40,7 @@ pub fn execute<R: BufRead, W: Write, V: Write>(
         }
         Err(nom::Err::Failure(Context::Code(span, nom::ErrorKind::Custom(err_code)))) => {
             let err_output = parser::ErrorCode::from(err_code).to_string(&span, input);
-            write!(stderr, "{}", err_output);
+            write!(stderr, "{}", err_output)?;
             Ok(())
         }
         Err(e) => Err(Error::Parser(format!("parser error: {}", e))),
