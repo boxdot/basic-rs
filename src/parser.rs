@@ -2,7 +2,7 @@ use crate::ast::*;
 use crate::error::Error;
 
 use nom::types::CompleteStr;
-use nom::{eol, space, space0, IResult};
+use nom::{eol, space, space0, ErrorKind, IResult};
 use nom_locate::LocatedSpan;
 
 use std::fmt;
