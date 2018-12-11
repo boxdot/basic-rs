@@ -1,5 +1,5 @@
-use error::Error;
-use parser::Span;
+use crate::error::Error;
+use crate::parser::Span;
 
 use nom::types::CompleteStr;
 
@@ -308,7 +308,7 @@ impl<'a> Program<'a> {
                             expression: for_line
                                 .for_statement
                                 .increment
-                                .unwrap_or(NumericExpression::with_constant(1.0)),
+                                .unwrap_or_else(|| NumericExpression::with_constant(1.0)),
                         }),
                     });
                     self.index_last_block()?;
@@ -450,12 +450,13 @@ impl<'a> Program<'a> {
         };
 
         for block in &self.blocks {
-            match block {
-                Block::Line {
-                    line_number,
-                    statement,
-                    statement_source,
-                } => match statement {
+            if let Block::Line {
+                line_number,
+                statement,
+                statement_source,
+            } = block
+            {
+                match statement {
                     Statement::Goto(ref_line_number) => {
                         check_line_number(*ref_line_number, *line_number, statement_source)?;
 
@@ -486,7 +487,7 @@ impl<'a> Program<'a> {
                     }) => {
                         let mut fns = Vec::new();
                         expression.function_calls(&mut fns);
-                        if fns.iter().position(|f| f == name).is_some() {
+                        if fns.iter().any(|f| f == name) {
                             let statement_source = source_code[statement_source.offset..]
                                 .lines()
                                 .next()
@@ -500,8 +501,7 @@ impl<'a> Program<'a> {
                         }
                     }
                     _ => (),
-                },
-                _ => (),
+                }
             }
         }
         Ok(())
@@ -630,12 +630,6 @@ pub struct OnGotoStatement {
 }
 
 // 6. Constants
-
-#[derive(Debug, PartialEq)]
-pub enum Constant {
-    Numeric(NumericConstant),
-    String(StringConstant),
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sign {

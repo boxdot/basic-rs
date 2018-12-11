@@ -1,7 +1,7 @@
-use ast::*;
-use error::Error;
-use format::format_float;
-use parser;
+use crate::ast::*;
+use crate::error::Error;
+use crate::format::format_float;
+use crate::parser;
 
 use itertools::Itertools;
 use nom::types::CompleteStr;
@@ -9,6 +9,7 @@ use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 
 use std::collections::HashMap;
+use std::f64;
 use std::io::{self, BufRead, Write};
 
 pub struct Interpreter<'a> {
@@ -193,7 +194,7 @@ impl<'a> Interpreter<'a> {
                     .map_err(|_| Error::InsufficientInput {
                     src_line_number: self.state.current_line_number,
                 })?;
-                for (variable, datum) in variables.into_iter().zip(constants) {
+                for (variable, datum) in variables.iter().zip(constants) {
                     self.assign_variable_from_datum(variable, &datum, stderr)?;
                 }
                 Action::NextLine
@@ -254,7 +255,7 @@ impl<'a> Interpreter<'a> {
 
                     let tab_width = (tab_width as usize) % COLUMN_WIDTH;
                     if tab_width < columnar_position {
-                        write!(stdout, "\n")?;
+                        writeln!(stdout)?;
                         columnar_position = 0;
                     }
 
@@ -273,7 +274,7 @@ impl<'a> Interpreter<'a> {
                         )?;
                         columnar_position = next_columnar_position;
                     } else {
-                        write!(stdout, "\n")?;
+                        writeln!(stdout)?;
                         columnar_position = 0;
                     }
                 }
@@ -293,7 +294,7 @@ impl<'a> Interpreter<'a> {
             .unwrap_or(false);
         if !last_item_is_comma_or_semicolon {
             self.state.columnar_position = 0;
-            write!(stdout, "\n")?;
+            writeln!(stdout)?;
         }
 
         Ok(())
@@ -364,10 +365,10 @@ impl<'a> Interpreter<'a> {
                 Ok(match relation {
                     Relation::LessThan => left < right,
                     Relation::LessThanOrEqualTo => left <= right,
-                    Relation::EqualTo => left == right,
+                    Relation::EqualTo => (left - right).abs() < f64::EPSILON,
                     Relation::GreaterThanOrEqualTo => left >= right,
                     Relation::GreaterThan => left > right,
-                    Relation::NotEqualTo => left != right,
+                    Relation::NotEqualTo => (left - right).abs() >= f64::EPSILON,
                 })
             }
         }
@@ -405,7 +406,7 @@ impl<'a> Interpreter<'a> {
 
     fn evaluate_read<W: Write>(
         &mut self,
-        variables: &Vec<Variable>,
+        variables: &[Variable],
         stderr: &mut W,
     ) -> Result<(), Error> {
         for variable in variables {
@@ -432,13 +433,13 @@ impl<'a> Interpreter<'a> {
                     if res.is_infinite() {
                         self.warn(stderr, "operation overflow (*)")?;
                     }
-                    acc = res
+                    acc = res;
                 }
                 Multiplier::Div => {
                     if factor == 0.0 {
                         self.warn(stderr, "division by zero ")?;
                     }
-                    acc = acc / factor
+                    acc /= factor;
                 }
             }
         }
@@ -848,8 +849,7 @@ impl<'a> Interpreter<'a> {
 
     fn get_array_index(&self, ar: &PlainArrayVariable) -> usize {
         let dim = &self.program.array_dims[&ar.letter];
-        let index = dim.offset + ar.subscript.0 + dim.dim1 * ar.subscript.1.unwrap_or(0);
-        index
+        dim.offset + ar.subscript.0 + dim.dim1 * ar.subscript.1.unwrap_or(0)
     }
 
     fn get_source_line(&self, offset: usize) -> &str {
@@ -857,9 +857,9 @@ impl<'a> Interpreter<'a> {
     }
 
     fn warn<W: Write, S: AsRef<str>>(&self, stderr: &mut W, message: S) -> io::Result<()> {
-        write!(
+        writeln!(
             stderr,
-            "{}: warning: {}\n",
+            "{}: warning: {}",
             self.state.current_line_number,
             message.as_ref()
         )
@@ -876,9 +876,9 @@ impl<'a> Interpreter<'a> {
         cursor: usize,
     ) -> io::Result<()> {
         let statement_source = self.get_source_line(self.state.current_source_offset as usize);
-        write!(
+        writeln!(
             stderr,
-            "{}: warning: {}\n {}\n {:cursor$}^\n",
+            "{}: warning: {}\n {}\n {:cursor$}^",
             self.state.current_line_number,
             message.as_ref(),
             statement_source,

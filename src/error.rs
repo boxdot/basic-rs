@@ -2,8 +2,8 @@ use nom;
 use nom::simple_errors::Context;
 use nom::types::CompleteStr;
 
-use ast::NextLine;
-use parser::{self, Span};
+use crate::ast::NextLine;
+use crate::parser::{self, Span};
 
 use std::convert;
 use std::fmt;
@@ -143,9 +143,9 @@ impl fmt::Display for Error {
                     .find(&format!("{}", line_number))
                     .unwrap_or(0)
                     + 1;
-                write!(
+                writeln!(
                     f,
-                    "{}: error: non-existing line number \n {}\n{:cursor$}^\n",
+                    "{}: error: non-existing line number \n {}\n{:cursor$}^",
                     src_line_number,
                     statement_source,
                     "",
@@ -153,64 +153,62 @@ impl fmt::Display for Error {
                 )
             }
             Error::StackUnderflow { src_line_number } => {
-                write!(f, "{}: error: stack underflow \n", src_line_number)
+                writeln!(f, "{}: error: stack underflow ", src_line_number)
             }
             Error::FracPowOfNegValue {
                 src_line_number,
                 value,
                 exp,
-            } => write!(
+            } => writeln!(
                 f,
-                "{}: error: negative value raised to non-integral value ({} ^ {})\n",
+                "{}: error: negative value raised to non-integral value ({} ^ {})",
                 src_line_number, value, exp
             ),
-            Error::InsufficientData { src_line_number } => write!(
+            Error::InsufficientData { src_line_number } => {
+                writeln!(f, "{}: error: insufficient data for READ ", src_line_number)
+            }
+            Error::ReadDatatypeMismatch { src_line_number } => writeln!(
                 f,
-                "{}: error: insufficient data for READ \n",
-                src_line_number
-            ),
-            Error::ReadDatatypeMismatch { src_line_number } => write!(
-                f,
-                "{}: error: reading string into numeric variable \n",
+                "{}: error: reading string into numeric variable ",
                 src_line_number
             ),
             Error::FunctionDomainError {
                 src_line_number,
                 ref function,
                 arg,
-            } => write!(
+            } => writeln!(
                 f,
-                "{}: error: function domain error {}({})\n",
+                "{}: error: function domain error {}({})",
                 src_line_number, function, arg
             ),
             Error::InvalidControlVariable {
                 src_line_number,
                 ref control_variable,
-            } => write!(
+            } => writeln!(
                 f,
-                "{}: error: invalid control variable {}\n",
+                "{}: error: invalid control variable {}",
                 src_line_number, control_variable
             ),
             Error::ControlVariableReuse {
                 src_line_number,
                 outer_line_number,
-            } => write!(
+            } => writeln!(
                 f,
-                "{}: error: FOR uses the same variable as outer FOR at line {}\n",
+                "{}: error: FOR uses the same variable as outer FOR at line {}",
                 src_line_number, outer_line_number
             ),
             Error::JumpIntoFor { src_line_number } => {
-                write!(f, "{}: error: jump into FOR block \n", src_line_number)
+                writeln!(f, "{}: error: jump into FOR block ", src_line_number)
             }
             Error::IndexOutOfRange { src_line_number } => {
-                write!(f, "{}: error: index out of range \n", src_line_number)
+                writeln!(f, "{}: error: index out of range ", src_line_number)
             }
             Error::ArrayIndexOutOfRange {
                 src_line_number,
                 ref array,
-            } => write!(
+            } => writeln!(
                 f,
-                "{}: error: index out of range {}\n",
+                "{}: error: index out of range {}",
                 src_line_number, array
             ),
             Error::TypeMismatch {
@@ -232,9 +230,9 @@ impl fmt::Display for Error {
                 } else {
                     format!("({})", bounds.0)
                 };
-                write!(
+                writeln!(
                     f,
-                    "{}: error: redimensioned variable {variable}\n DIM {variable}{bounds}\n     ^\n",
+                    "{}: error: redimensioned variable {variable}\n DIM {variable}{bounds}\n     ^",
                     src_line_number,
                     variable = variable,
                     bounds = bounds
@@ -265,9 +263,9 @@ impl fmt::Display for Error {
                             .map(|pos| pos + start)
                     })
                     .unwrap_or(0);
-                write!(
+                writeln!(
                     f,
-                    "{}: error: undefined function {}\n {}\n{:cursor$}^\n",
+                    "{}: error: undefined function {}\n {}\n{:cursor$}^",
                     src_line_number,
                     fn_name,
                     statement_source,
@@ -276,7 +274,7 @@ impl fmt::Display for Error {
                 )
             }
             Error::InsufficientInput { src_line_number } => {
-                write!(f, "{}: error: insufficient INPUT\n", src_line_number,)
+                writeln!(f, "{}: error: insufficient INPUT", src_line_number,)
             }
             Error::InvalidDimSubscript {
                 src_line_number,
@@ -285,9 +283,9 @@ impl fmt::Display for Error {
             } => {
                 let subscript = format!("{}", subscript);
                 let cursor = statement_source.find(&subscript).unwrap_or(0);
-                write!(
+                writeln!(
                     f,
-                    "{}: error: invalid DIM subscript \n {}\n{:cursor$}^\n",
+                    "{}: error: invalid DIM subscript \n {}\n{:cursor$}^",
                     src_line_number,
                     statement_source,
                     "",
@@ -299,7 +297,7 @@ impl fmt::Display for Error {
     }
 }
 
-pub fn format_remaining<'a>(remaining: &'a str) -> Result<String, Error> {
+pub fn format_remaining(remaining: &'_ str) -> Result<String, Error> {
     let failed_line = remaining.lines().next().unwrap();
     let failed_span = Span::new(CompleteStr(failed_line));
 
