@@ -365,10 +365,10 @@ impl<'a> Interpreter<'a> {
                 Ok(match relation {
                     Relation::LessThan => left < right,
                     Relation::LessThanOrEqualTo => left <= right,
-                    Relation::EqualTo => (left - right).abs() < f64::EPSILON,
+                    Relation::EqualTo => left.eq(&right),
                     Relation::GreaterThanOrEqualTo => left >= right,
                     Relation::GreaterThan => left > right,
-                    Relation::NotEqualTo => (left - right).abs() >= f64::EPSILON,
+                    Relation::NotEqualTo => !left.eq(&right),
                 })
             }
         }
