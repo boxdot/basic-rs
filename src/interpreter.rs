@@ -9,7 +9,7 @@ use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 
 use std::collections::HashMap;
-use std::io::{BufRead, Write};
+use std::io::{self, BufRead, Write};
 
 pub struct Interpreter<'a> {
     program: &'a Program<'a>,
@@ -233,13 +233,13 @@ impl<'a> Interpreter<'a> {
                 PrintItem::Expression(expression) => match expression {
                     Expression::String(string_expression) => {
                         let value = self.evaluate_string_expression(string_expression)?;
-                        write!(stdout, "{}", value);
+                        write!(stdout, "{}", value)?;
                         columnar_position += value.len();
                     }
                     Expression::Numeric(numeric_expression) => {
                         let value = self.evaluate_numeric_expression(numeric_expression, stderr)?;
                         let value_str = format_float(value);
-                        write!(stdout, "{}", value_str);
+                        write!(stdout, "{}", value_str)?;
                         columnar_position += value_str.len();
                     }
                 },
@@ -248,17 +248,17 @@ impl<'a> Interpreter<'a> {
                         .evaluate_numeric_expression(numeric_expression, stderr)?
                         .round() as i64;
                     if tab_width < 1 {
-                        self.warn(stderr, format!("invalid TAB argument ({})", tab_width));
+                        self.warn(stderr, format!("invalid TAB argument ({})", tab_width))?;
                         continue;
                     }
 
                     let tab_width = (tab_width as usize) % COLUMN_WIDTH;
                     if tab_width < columnar_position {
-                        write!(stdout, "\n");
+                        write!(stdout, "\n")?;
                         columnar_position = 0;
                     }
 
-                    write!(stdout, "{:1$}", "", tab_width - columnar_position - 1);
+                    write!(stdout, "{:1$}", "", tab_width - columnar_position - 1)?;
                     columnar_position = tab_width - 1;
                 }
                 PrintItem::Comma => {
@@ -270,10 +270,10 @@ impl<'a> Interpreter<'a> {
                             "{:1$}",
                             "",
                             next_columnar_position - columnar_position
-                        );
+                        )?;
                         columnar_position = next_columnar_position;
                     } else {
-                        write!(stdout, "\n");
+                        write!(stdout, "\n")?;
                         columnar_position = 0;
                     }
                 }
@@ -293,7 +293,7 @@ impl<'a> Interpreter<'a> {
             .unwrap_or(false);
         if !last_item_is_comma_or_semicolon {
             self.state.columnar_position = 0;
-            write!(stdout, "\n");
+            write!(stdout, "\n")?;
         }
 
         Ok(())
@@ -430,13 +430,13 @@ impl<'a> Interpreter<'a> {
                 Multiplier::Mul => {
                     let res = acc * factor;
                     if res.is_infinite() {
-                        self.warn(stderr, "operation overflow (*)");
+                        self.warn(stderr, "operation overflow (*)")?;
                     }
                     acc = res
                 }
                 Multiplier::Div => {
                     if factor == 0.0 {
-                        self.warn(stderr, "division by zero ");
+                        self.warn(stderr, "division by zero ")?;
                     }
                     acc = acc / factor
                 }
@@ -462,9 +462,9 @@ impl<'a> Interpreter<'a> {
                 self.warn(
                     stderr,
                     &format!("zero raised to negative value ({} ^ {})", acc, primary),
-                );
+                )?;
             } else if res.is_infinite() {
-                self.warn(stderr, "operation overflow");
+                self.warn(stderr, "operation overflow")?;
             }
 
             acc = res;
@@ -498,19 +498,22 @@ impl<'a> Interpreter<'a> {
             Function::Cos(expr) => self
                 .evaluate_numeric_expression(expr, stderr)
                 .map(|value| value.cos()),
-            Function::Exp(expr) => self.evaluate_numeric_expression(expr, stderr).map(|value| {
-                let res = value.exp();
-                if res.is_infinite() {
-                    self.warn(
-                        stderr,
-                        format!(
-                            "operation overflow EXP({})",
-                            (value * 100.0).round() / 100.0
-                        ),
-                    );
-                }
-                res
-            }),
+            Function::Exp(expr) => {
+                self.evaluate_numeric_expression(expr, stderr)
+                    .and_then(|value| {
+                        let res = value.exp();
+                        if res.is_infinite() {
+                            self.warn(
+                                stderr,
+                                format!(
+                                    "operation overflow EXP({})",
+                                    (value * 100.0).round() / 100.0
+                                ),
+                            )?;
+                        }
+                        Ok(res)
+                    })
+            }
             Function::Int(expr) => self
                 .evaluate_numeric_expression(expr, stderr)
                 .map(|value| value.trunc()),
@@ -653,7 +656,7 @@ impl<'a> Interpreter<'a> {
                     "zero raised to negative value ({} * {})",
                     constant.significand, constant.exrad
                 ),
-            );
+            )?;
         }
         let c = constant.sign * constant.significand * 10f64.powi(constant.exrad);
         if c.is_infinite() {
@@ -661,9 +664,9 @@ impl<'a> Interpreter<'a> {
             let significand = format!("{}", constant.significand as usize);
             let cursor = line.find(&significand);
             if let Some(cursor) = cursor {
-                self.warn_with_cursor(stderr, "numeric constant overflow ", cursor);
+                self.warn_with_cursor(stderr, "numeric constant overflow ", cursor)?;
             } else {
-                self.warn(stderr, "numeric constant overflow ");
+                self.warn(stderr, "numeric constant overflow ")?;
             }
         }
         Ok(c)
@@ -717,14 +720,14 @@ impl<'a> Interpreter<'a> {
                     _ => {
                         return Err(Error::ReadDatatypeMismatch {
                             src_line_number: self.state.current_line_number,
-                        })
+                        });
                     }
                 }
             }
             _ => {
                 return Err(Error::ReadDatatypeMismatch {
                     src_line_number: self.state.current_line_number,
-                })
+                });
             }
         }
         Ok(())
@@ -853,20 +856,25 @@ impl<'a> Interpreter<'a> {
         self.source_code[offset..].lines().next().unwrap()
     }
 
-    fn warn<W: Write, S: AsRef<str>>(&self, stderr: &mut W, message: S) {
+    fn warn<W: Write, S: AsRef<str>>(&self, stderr: &mut W, message: S) -> io::Result<()> {
         write!(
             stderr,
             "{}: warning: {}\n",
             self.state.current_line_number,
             message.as_ref()
-        );
+        )
     }
 
     /// Generate a warning with statement source code and cursor.
     ///
     /// `cursor_fragment` must be a substring of the current statement source code.
     /// At the beginning of the substring a cursor marker `^` is generated.
-    fn warn_with_cursor<W: Write, S: AsRef<str>>(&self, stderr: &mut W, message: S, cursor: usize) {
+    fn warn_with_cursor<W: Write, S: AsRef<str>>(
+        &self,
+        stderr: &mut W,
+        message: S,
+        cursor: usize,
+    ) -> io::Result<()> {
         let statement_source = self.get_source_line(self.state.current_source_offset as usize);
         write!(
             stderr,
@@ -876,6 +884,6 @@ impl<'a> Interpreter<'a> {
             statement_source,
             "",
             cursor = cursor
-        );
+        )
     }
 }

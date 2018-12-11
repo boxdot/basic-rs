@@ -7,6 +7,7 @@ use parser::{self, Span};
 
 use std::convert;
 use std::fmt;
+use std::io;
 
 #[derive(Debug)]
 pub enum Error {
@@ -90,6 +91,7 @@ pub enum Error {
         subscript: usize,
         statement_source: String,
     },
+    IoError(io::Error),
 }
 
 impl<'a> convert::From<nom::Err<Span<'a>>> for Error {
@@ -103,6 +105,12 @@ impl<'a> convert::From<nom::Err<Span<'a>>> for Error {
                 Error::Parser(format!("{}", span.fragment))
             }
         }
+    }
+}
+
+impl convert::From<io::Error> for Error {
+    fn from(e: io::Error) -> Self {
+        Error::IoError(e)
     }
 }
 
@@ -286,6 +294,7 @@ impl fmt::Display for Error {
                     cursor = cursor + 1
                 )
             }
+            Error::IoError(ref e) => write!(f, "{}", e),
         }
     }
 }
