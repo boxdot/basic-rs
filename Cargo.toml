@@ -2,6 +2,7 @@
 name = "basic"
 version = "0.1.0"
 authors = ["boxdot <d@zerovolt.org>", "jeschkies <k@jeschkies.xyz>"]
+edition = "2018"
 
 [dependencies]
 nom = "4.0"

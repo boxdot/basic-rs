@@ -11,11 +11,11 @@ mod format;
 mod interpreter;
 mod parser;
 
-use interpreter::Interpreter;
+use crate::interpreter::Interpreter;
 use nom::simple_errors::Context;
 use nom::types::CompleteStr;
 
-pub use error::Error;
+pub use crate::error::Error;
 
 use std::io::{BufRead, Write};
 
