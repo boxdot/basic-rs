@@ -42,7 +42,7 @@ pub fn format_float(value: f64) -> String {
         let integ = parts.next().unwrap();
         let fract = parts.next().unwrap();
 
-        let fract = fract.trim_right_matches('0');
+        let fract = fract.trim_end_matches('0');
 
         let extrad_int: i64 = str::parse(extrad).unwrap();
         if extrad_int > 0
