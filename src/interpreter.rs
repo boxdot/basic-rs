@@ -5,8 +5,8 @@ use crate::parser;
 
 use itertools::Itertools;
 use nom::types::CompleteStr;
-use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
+use rand_xorshift::XorShiftRng;
 
 use std::collections::HashMap;
 use std::f64;
@@ -37,7 +37,7 @@ struct State {
     /// DATA statement pointer
     data_pointer: u16,
     /// random number generator
-    rng: SmallRng,
+    rng: XorShiftRng,
 }
 
 impl Default for State {
@@ -51,7 +51,7 @@ impl Default for State {
             array_values: Default::default(),
             stack: Default::default(),
             data_pointer: Default::default(),
-            rng: SmallRng::from_seed([
+            rng: XorShiftRng::from_seed([
                 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF,
             ]),
         }
@@ -62,7 +62,7 @@ impl State {
     fn new(array_values_len: usize) -> Self {
         Self {
             array_values: vec![0.0; array_values_len],
-            rng: SmallRng::from_seed([
+            rng: XorShiftRng::from_seed([
                 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF,
             ]),
             ..Default::default()
