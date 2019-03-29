@@ -2,8 +2,6 @@
 extern crate nom;
 #[macro_use]
 extern crate nom_locate;
-extern crate itertools;
-extern crate rand;
 
 mod ast;
 mod error;

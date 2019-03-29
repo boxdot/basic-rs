@@ -1,8 +1,3 @@
-extern crate basic;
-extern crate cfg_if;
-extern crate wasm_bindgen;
-
-use basic::Error;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -23,14 +18,8 @@ impl Output {
     }
 }
 
-impl From<(String, String)> for Output {
-    fn from((stdout, stderr): (String, String)) -> Self {
-        Self { stdout, stderr }
-    }
-}
-
-impl From<Error> for Output {
-    fn from(e: Error) -> Self {
+impl From<basic::Error> for Output {
+    fn from(e: basic::Error) -> Self {
         Self {
             stdout: String::new(),
             stderr: format!("{}", e),
@@ -40,7 +29,16 @@ impl From<Error> for Output {
 
 #[wasm_bindgen]
 pub fn execute(input: &str) -> Output {
-    basic::execute(input)
-        .map(Output::from)
-        .unwrap_or_else(Output::from)
+    let mut stdin = std::io::empty();
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+
+    if let Err(e) = basic::execute(input, &mut stdin, &mut stdout, &mut stderr) {
+        Output::from(e)
+    } else {
+        Output {
+            stdout: String::from_utf8(stdout).unwrap(),
+            stderr: String::from_utf8(stderr).unwrap(),
+        }
+    }
 }
