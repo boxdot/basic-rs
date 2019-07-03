@@ -10,6 +10,7 @@ nom_locate = "0.3.1"
 itertools = "0.8.0"
 rand = "0.6.5"
 rand_xorshift = "0.1.1"
+nom5 = { package = "nom", version = "5.0" }
 
 [dev-dependencies]
 diff = "0.1.11"

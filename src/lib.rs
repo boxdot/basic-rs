@@ -8,6 +8,7 @@ mod error;
 mod format;
 mod interpreter;
 mod parser;
+mod parser2;
 
 use crate::interpreter::Interpreter;
 use nom::simple_errors::Context;
