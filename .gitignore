@@ -4,6 +4,8 @@
 
 # IDE integration
 .vscode
+.idea
+basic-rs.iml
 
 # WASM compiler output
 wasm/webapp/app.js
