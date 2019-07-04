@@ -99,6 +99,24 @@ named!(unquoted_string_character<Span, char>,
 named!(quoted_string_character<Span, char>,
     alt!(
         char!('!') |
+        char!('#') |
+        char!('$') |
+        char!('%') |
+        char!('&') |
+        char!('\'') |
+        char!('(') |
+        char!(')') |
+        char!('*') |
+        char!(',') |
+        char!('/') |
+        char!(':') |
+        char!(';') |
+        char!('<') |
+        char!('=') |
+        char!('>') |
+        char!('?') |
+        char!('ˆ') |
+        char!('_') |
         unquoted_string_character
     ));
 
