@@ -517,7 +517,7 @@ impl<'a> Interpreter<'a> {
             }
             Function::Int(expr) => self
                 .evaluate_numeric_expression(expr, stderr)
-                .map(|value| value.trunc()),
+                .map(|value| value.floor()),
             Function::Rnd => Ok(self.state.rng.gen()),
             Function::Log(expr) => {
                 self.evaluate_numeric_expression(expr, stderr)
