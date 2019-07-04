@@ -115,7 +115,7 @@ named!(quoted_string_character<Span, char>,
         char!('=') |
         char!('>') |
         char!('?') |
-        char!('ˆ') |
+        char!('^') |
         char!('_') |
         unquoted_string_character
     ));
@@ -260,7 +260,7 @@ named!(exrad<Span, i32>,
 named!(string_constant<Span, StringConstant>,
     do_parse!(
       char!('"') >>
-      chars: many1!(quoted_string_character) >>
+      chars: many0!(quoted_string_character) >>
       char!('"') >>
       (StringConstant(String::from(chars.into_iter().collect::<String>())))
     ));
@@ -861,10 +861,10 @@ mod tests {
 
     #[test]
     fn test_for_block() -> Result<(), Error> {
-        const PROGRAM: &str = r#"100 PRINT "Hello, World!"
+        const PROGRAM: &str = r#"100 PRINT "HELLO, WORLD!"
 110 FOR I = 0 TO 10 STEP 1
-120 PRINT "Wow!"
-121 PRINT "Wow!"
+120 PRINT "WOW!"
+121 PRINT "WOW!"
 130 NEXT I
 140 END
 "#;
