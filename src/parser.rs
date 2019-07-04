@@ -96,6 +96,12 @@ named!(digit<Span, u8>,
 named!(unquoted_string_character<Span, char>,
     alt!(char!(' ') | plain_string_character));
 
+named!(quoted_string_character<Span, char>,
+    alt!(
+        char!('!') |
+        unquoted_string_character
+    ));
+
 named!(plain_string_character<Span, char>,
     alt!(
         char!('+') |
@@ -235,8 +241,10 @@ named!(exrad<Span, i32>,
 
 named!(string_constant<Span, StringConstant>,
     do_parse!(
-        s: delimited!(char!('"'), take_until!("\""), char!('"')) >>
-        (StringConstant(s.to_string()))
+      char!('"') >>
+      chars: many1!(quoted_string_character) >>
+      char!('"') >>
+      (StringConstant(String::from(chars.into_iter().collect::<String>())))
     ));
 
 // 7. Variables
