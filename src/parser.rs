@@ -1,15 +1,16 @@
 use crate::ast::*;
 use crate::error::Error;
 
-use nom::types::CompleteStr;
-use nom::{eol, space, space0, ErrorKind, IResult};
+use nom::{eol, ErrorKind, IResult};
+use nom::branch::alt;
+use nom::character::streaming::{one_of, space1, space0};
+use nom::combinator:: map;
+use nom::error::ParseError;
+use num::multi::many1;
 use nom_locate::LocatedSpan;
 
 use std::fmt;
 use std::num;
-
-/// Captures the offset, line number and remaining text for the current position of the parser.
-pub type Span<'a> = LocatedSpan<CompleteStr<'a>>;
 
 /// Parser error codes.
 ///
@@ -87,31 +88,37 @@ fn is_digit(c: char) -> bool {
     }
 }
 
-named!(letter<Span, char>,
-    one_of!("ABCDEFGHIJKLMNOPQRSTUVWXYZ"));
+fn letter<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
+    one_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ")(i)
+}
 
-named!(digit<Span, u8>,
-    map!(one_of!("0123456789"), |c| c as u8 - b'0'));
+fn digit<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, u8, E> {
+    map(one_of("0123456789"), |c| c as u8 - b'0')(i) // TODO: use be_u8
+}
 
-named!(unquoted_string_character<Span, char>,
-    alt!(char!(' ') | plain_string_character));
+fn unquoted_string_character<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, char, E> {
+   alt((
+       char(' '),
+       plain_string_character
+   ))(i)
+}
 
-named!(plain_string_character<Span, char>,
-    alt!(
-        char!('+') |
-        char!('-') |
-        char!('.') |
-        one_of!("0123456789") |
+fn plain_string_character<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, char, E> {
+    alt((
+        char!('+'),
+        char!('-'),
+        char!('.'),
+        one_of("0123456789"),
         letter
-    ));
+    ))(i)
+}
 
-named!(unquoted_string<Span, String>,
-    map!(many1!(unquoted_string_character), {
-        |chars: Vec<char>| {
-            let s = chars.into_iter().collect::<String>();
-            String::from(s.trim())
-        }
-    }));
+fn unquoted_string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, String, E> {
+    map(many1(unquoted_string_character), |chars: Vec<char>| {
+        let s = chars.into_iter().collect::<String>();
+        String::from(s.trim())
+    })(i)
+}
 
 // 5. Programs
 
@@ -124,13 +131,17 @@ pub fn program<'a>(input: Span<'a>) -> IResult<Span<'a>, Result<Program<'a>, Err
     )
 }
 
-named!(block<Span, Block>,
-    alt!(line | for_block));
+fn block<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Block, E> {
+   alt((line, for_block))(i)
+}
 
-named!(pub line<Span, Block>,
+fn line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Block, E> {
+    let (rest, line_number) = line_number(i)?;
+    let (rest, _) = space1(rest)?;
+}
     do_parse!(
         line_number: line_number >>
-        space >>
+        space1 >>
         statement_source: position!() >>
         statement: statement >>
         space0 >>
@@ -142,18 +153,18 @@ named!(pub line<Span, Block>,
         })
     ));
 
-named!(line_number<Span, u16>,
+fn line_number<Span, u16>,
     map_res!(take_while_m_n!(1, 4, is_digit), from_decimal));
 
-named!(end_of_line<Span, Span>, alt!(eof!() | eol));
+fn end_of_line<Span, Span>, alt!(eof!() | eol));
 
-named!(end_statement<Span, Statement>,
+fn end_statement<Span, Statement>,
     do_parse!(
         tag!("END") >>
         (Statement::End)
     ));
 
-named!(statement<Span, Statement>,
+fn statement<Span, Statement>,
     alt!(
         goto_statement |
         gosub_statement |
@@ -176,7 +187,7 @@ named!(statement<Span, Statement>,
 
 // 6. Constants
 
-named!(pub numeric_constant<Span, NumericConstant>,
+fn pub numeric_constant<Span, NumericConstant>,
     do_parse!(
         sign: opt!(sign) >>
         space0 >>
@@ -188,7 +199,7 @@ named!(pub numeric_constant<Span, NumericConstant>,
         })
     ));
 
-named!(sign<Span, Sign>,
+fn sign<Span, Sign>,
     alt!(
         char!('+') => { |_| Sign::Pos } |
         char!('-') => { |_| Sign::Neg }
@@ -196,7 +207,7 @@ named!(sign<Span, Sign>,
 
 // We slightly deviate from the standard and allow an optional sign here:
 // cf. test P038.
-named!(numeric_rep<Span, (f64, i32)>,
+fn numeric_rep<Span, (f64, i32)>,
     do_parse!(
         sign: opt!(sign) >>
         space0 >>
@@ -205,7 +216,7 @@ named!(numeric_rep<Span, (f64, i32)>,
         (sign.unwrap_or(Sign::Pos)  * significand, exrad.unwrap_or(0))
     ));
 
-named!(significand<Span, f64>,
+fn significand<Span, f64>,
     alt!(
         pair!(opt!(integer), fraction) => {
             |(integral, frac): (Option<u64>, f64)| integral.unwrap_or(0) as f64 + frac
@@ -213,16 +224,16 @@ named!(significand<Span, f64>,
         | pair!(integer, opt!(char!('.'))) => { |(i, _)| i as f64 }
     ));
 
-named!(integer<Span, u64>,
+fn integer<Span, u64>,
     map_res!(take_while1!(is_digit), u64_from_decimal));
 
-named!(fraction<Span, f64>,
+fn fraction<Span, f64>,
     map_res!(preceded!(char!('.'), take_while1!(is_digit)),
         |s| u64_from_decimal(s).map(|frac| {
             frac as f64 / (10_u64.pow(s.fragment.len() as u32) as f64)
         })));
 
-named!(exrad<Span, i32>,
+fn exrad<Span, i32>,
     map!(
         preceded!(char!('E'),
             pair!(
@@ -233,7 +244,7 @@ named!(exrad<Span, i32>,
         |(sign, exp)| sign.unwrap_or(Sign::Pos) * exp
     ));
 
-named!(string_constant<Span, StringConstant>,
+fn string_constant<Span, StringConstant>,
     do_parse!(
         s: delimited!(char!('"'), take_until!("\""), char!('"')) >>
         (StringConstant(s.to_string()))
@@ -241,26 +252,26 @@ named!(string_constant<Span, StringConstant>,
 
 // 7. Variables
 
-named!(variable<Span, Variable>,
+fn variable<Span, Variable>,
     alt!(
         map!(string_variable, Variable::String) |
         map!(numeric_variable, Variable::Numeric)
     ));
 
-named!(numeric_variable<Span, NumericVariable>,
+fn numeric_variable<Span, NumericVariable>,
     alt!(
         map!(numeric_array_element, NumericVariable::Array) |
         map!(simple_numeric_variable, NumericVariable::Simple)
     ));
 
-named!(simple_numeric_variable<Span, SimpleNumericVariable>,
+fn simple_numeric_variable<Span, SimpleNumericVariable>,
     do_parse!(
         letter: letter >>
         digit: opt!(digit) >>
         (SimpleNumericVariable { letter, digit })
     ));
 
-named!(numeric_array_element<Span, ArrayVariable>,
+fn numeric_array_element<Span, ArrayVariable>,
     do_parse!(
         numeric_array_name: letter >>
         subscript: subscript >>
@@ -270,7 +281,7 @@ named!(numeric_array_element<Span, ArrayVariable>,
         })
     ));
 
-named!(subscript<Span, (NumericExpression, Option<NumericExpression>)>,
+fn subscript<Span, (NumericExpression, Option<NumericExpression>)>,
     do_parse!(
         char!('(') >>
         subscript1: numeric_expression >>
@@ -279,12 +290,12 @@ named!(subscript<Span, (NumericExpression, Option<NumericExpression>)>,
         ((subscript1, subscript2))
     ));
 
-named!(string_variable<Span, StringVariable>,
+fn string_variable<Span, StringVariable>,
     map!(terminated!(letter, char!('$')), StringVariable));
 
 // 8. Expressions
 
-named!(expression<Span, Expression>,
+fn expression<Span, Expression>,
     alt!(
         // Note: Since numeric_expression sometimes matches a prefix of a string_expression,
         // first we need to try to parse string_expression, and only after it numeric_expression.
@@ -292,7 +303,7 @@ named!(expression<Span, Expression>,
         map!(numeric_expression, Expression::Numeric)
     ));
 
-named!(numeric_expression<Span, NumericExpression>,
+fn numeric_expression<Span, NumericExpression>,
     do_parse!(
         leading_sign: opt!(sign) >>
         space0 >>
@@ -303,7 +314,7 @@ named!(numeric_expression<Span, NumericExpression>,
         (NumericExpression::new(leading_sign, leading_term, terms))
     ));
 
-named!(term<Span, Term>,
+fn term<Span, Term>,
     do_parse!(
         leading_factor: factor >>
         factors: many0!(pair!(
@@ -312,7 +323,7 @@ named!(term<Span, Term>,
         (Term::new(leading_factor, factors))
     ));
 
-named!(factor<Span, Factor>,
+fn factor<Span, Factor>,
     do_parse!(
         leading_primary: primary >>
         primaries: many0!(preceded!(
@@ -321,13 +332,13 @@ named!(factor<Span, Factor>,
         (Factor::new(leading_primary, primaries))
     ));
 
-named!(multiplier<Span, Multiplier>,
+fn multiplier<Span, Multiplier>,
     alt!(
         char!('*') => { |_| Multiplier::Mul } |
         char!('/') => { |_| Multiplier::Div }
     ));
 
-named!(primary<Span, Primary>,
+fn primary<Span, Primary>,
     alt!(
         map!(numeric_function_ref, Primary::Function) |
         map!(numeric_defined_function_ref, Primary::DefFunctionCall) |
@@ -336,7 +347,7 @@ named!(primary<Span, Primary>,
         map!(delimited!(char!('('), numeric_expression, char!(')')), Primary::Expression)
     ));
 
-named!(numeric_function_ref<Span, Function>,
+fn numeric_function_ref<Span, Function>,
     alt!(
         pair!(tag!("ABS"), argument_list) => { |(_, arg)| Function::Abs(arg) } |
         pair!(tag!("ATN"), argument_list) => { |(_, arg)| Function::Atn(arg) } |
@@ -351,21 +362,21 @@ named!(numeric_function_ref<Span, Function>,
         pair!(tag!("TAN"), argument_list) => { |(_, arg)| Function::Tan(arg) }
     ));
 
-named!(numeric_defined_function_ref<Span, DefFunctionCall>,
+fn numeric_defined_function_ref<Span, DefFunctionCall>,
     map!(pair!(numeric_defined_function, opt!(argument_list)),
         |(f, arg)| { DefFunctionCall { name: f, arg } }
     ));
 
-named!(argument_list<Span, NumericExpression>,
+fn argument_list<Span, NumericExpression>,
     delimited!(char!('('), numeric_expression, char!(')')));
 
-named!(string_expression<Span, StringExpression>,
+fn string_expression<Span, StringExpression>,
     alt!(
         map!(string_variable, StringExpression::Variable) |
         map!(string_constant, StringExpression::Constant)
     ));
 
-named!(relation<Span, Relation>,
+fn relation<Span, Relation>,
     alt!(
         tag!("==") => { |_| Relation::EqualTo } |
         tag!("=") => { |_| Relation::EqualTo} |
@@ -377,7 +388,7 @@ named!(relation<Span, Relation>,
     )
 );
 
-named!(equality_relation<Span, EqualityRelation>,
+fn equality_relation<Span, EqualityRelation>,
     alt!(
         tag!("==") => { |_| EqualityRelation::EqualTo } |
         tag!("=") => { |_| EqualityRelation::EqualTo} |
@@ -387,10 +398,10 @@ named!(equality_relation<Span, EqualityRelation>,
 
 // 10. User defined functions
 
-named!(def_statement<Span, Statement>,
+fn def_statement<Span, Statement>,
     do_parse!(
         tag!("DEF") >>
-        space >>
+        space1 >>
         name: numeric_defined_function >>
         parameter: opt!(delimited!(char!('('), simple_numeric_variable, char!(')'))) >>
         space0 >>
@@ -404,17 +415,17 @@ named!(def_statement<Span, Statement>,
         }))
     ));
 
-named!(numeric_defined_function<Span, char>,
+fn numeric_defined_function<Span, char>,
     preceded!(tag!("FN"), letter));
 
 // 11. LET statement
 
-named!(let_statement<Span, Statement>,
+fn let_statement<Span, Statement>,
     map!(alt!(numeric_let_statement | string_let_statement), Statement::Let));
 
-named!(numeric_let_statement<Span, LetStatement>,
+fn numeric_let_statement<Span, LetStatement>,
     do_parse!(
-        tag!("LET") >> space >>
+        tag!("LET") >> space1 >>
         variable: numeric_variable >>
         space0 >>
         tag!("=") >>
@@ -423,7 +434,7 @@ named!(numeric_let_statement<Span, LetStatement>,
         (LetStatement::Numeric{ variable, expression })
     ));
 
-named!(string_let_statement<Span, LetStatement>,
+fn string_let_statement<Span, LetStatement>,
     do_parse!(
         tag!("LET") >> space >>
         variable: string_variable >>
@@ -436,7 +447,7 @@ named!(string_let_statement<Span, LetStatement>,
 
 // 12. Control statements
 
-named!(goto_statement<Span, Statement>,
+fn goto_statement<Span, Statement>,
     do_parse!(
         tag!("GO") >>
         space0 >>
@@ -446,7 +457,7 @@ named!(goto_statement<Span, Statement>,
         (Statement::Goto(line_number))
     ));
 
-named!(gosub_statement<Span, Statement>,
+fn gosub_statement<Span, Statement>,
     do_parse!(
         tag!("GO") >>
         space0 >>
@@ -456,7 +467,7 @@ named!(gosub_statement<Span, Statement>,
         (Statement::Gosub(line_number))
     ));
 
-named!(if_then_statement<Span, Statement>,
+fn if_then_statement<Span, Statement>,
     do_parse!(
         tag!("IF") >>
         space0 >>
@@ -468,7 +479,7 @@ named!(if_then_statement<Span, Statement>,
         (Statement::IfThen(if_statement, line_number))
     ));
 
-named!(relational_expression<Span, RelationalExpression>,
+fn relational_expression<Span, RelationalExpression>,
     alt!(
         do_parse!(
         left_expression: numeric_expression >>
@@ -489,28 +500,28 @@ named!(relational_expression<Span, RelationalExpression>,
     ))
 );
 
-named!(return_statement<Span, Statement>,
+fn return_statement<Span, Statement>,
     do_parse!(
         tag!("RETURN") >>
         (Statement::Return)
     ));
 
-named!(on_goto_statement<Span, Statement>,
+fn on_goto_statement<Span, Statement>,
     do_parse!(
         tag!("ON") >>
-        space >>
+        space1 >>
         numeric_expression: numeric_expression >>
-        space >>
+        space1 >>
         tag!("GO") >>
         space0 >>
         tag!("TO") >>
-        space >>
+        space1 >>
         line_numbers: separated_nonempty_list!(
             delimited!(space0, char!(','), space0), line_number) >>
         (Statement::OnGoto(OnGotoStatement { numeric_expression, line_numbers }))
     ));
 
-named!(stop_statement<Span, Statement>,
+fn stop_statement<Span, Statement>,
     do_parse!(
         tag!("STOP") >>
         (Statement::Stop)
@@ -518,7 +529,7 @@ named!(stop_statement<Span, Statement>,
 
 // 13. FOR and NEXT statements
 
-named!(for_block<Span, Block>,
+fn for_block<Span, Block>,
     do_parse!(
         for_line: for_line >>
         for_body: for_body >>
@@ -529,17 +540,17 @@ named!(for_block<Span, Block>,
         })
     ));
 
-named!(for_body<Span, (Vec<Block>, NextLine)>,
+fn for_body<Span, (Vec<Block>, NextLine)>,
     do_parse!(
         blocks: many0!(block) >>
         next_line: return_error!(ErrorKind::Custom(ErrorCode::ForWithoutNext as u32), next_line) >>
         ((blocks, next_line))
     ));
 
-named!(for_line<Span, ForLine>,
+fn for_line<Span, ForLine>,
     do_parse!(
         line_number: line_number >>
-        space >>
+        space1 >>
         statement_source: position!() >>
         for_statement: for_statement >>
         space0 >>
@@ -551,10 +562,10 @@ named!(for_line<Span, ForLine>,
         })
     ));
 
-named!(pub next_line<Span, NextLine>,
+fn pub next_line<Span, NextLine>,
     do_parse!(
         line_number: line_number >>
-        space >>
+        space1 >>
         statement_source: position!() >>
         next_statement: next_statement >>
         space0 >>
@@ -566,18 +577,18 @@ named!(pub next_line<Span, NextLine>,
         })
     ));
 
-named!(for_statement<Span, ForStatement>,
+fn for_statement<Span, ForStatement>,
     do_parse!(
         tag!("FOR") >>
-        space >>
+        space1 >>
         control_variable: simple_numeric_variable >>
         space0 >>
         char!('=') >>
         space0 >>
         initial_value: numeric_expression >>
-        space >>
+        space1 >>
         tag!("TO") >>
-        space >>
+        space1 >>
         limit: numeric_expression >>
         space0 >>
         opt!(tag!("STEP")) >>
@@ -592,10 +603,10 @@ named!(for_statement<Span, ForStatement>,
         })
     ));
 
-named!(next_statement<Span, NextStatement>,
+fn next_statement<Span, NextStatement>,
     do_parse!(
         tag!("NEXT") >>
-        space >>
+        space1 >>
         control_variable: simple_numeric_variable >>
         (NextStatement {
             control_variable
@@ -604,34 +615,34 @@ named!(next_statement<Span, NextStatement>,
 
 // 14. PRINT statement
 
-named!(print_statement<Span, Statement>,
+fn print_statement<Span, Statement>,
     do_parse!(
         tag!("PRINT") >>
-        print_list: opt!(sep!(space, print_list)) >>
+        print_list: opt!(sep!(space1, print_list)) >>
         (Statement::Print(PrintStatement{ list: print_list.unwrap_or_else(Vec::new) }))
     ));
 
-named!(print_list<Span, Vec<PrintItem>>,
+fn print_list<Span, Vec<PrintItem>>,
     do_parse!(
         items: many0!(pair!(opt!(print_item), print_separator)) >>
         trailing_item: opt!(print_item) >>
         (new_print_items(items, trailing_item))
     ));
 
-named!(print_item<Span, PrintItem>,
+fn print_item<Span, PrintItem>,
     alt!(
         // Note: expression consumes T of TAB, therefore tab_call needs to be parsed first.
         tab_call |
         map!(expression, PrintItem::Expression)
     ));
 
-named!(tab_call<Span, PrintItem>,
+fn tab_call<Span, PrintItem>,
     map!(
         delimited!(tag!("TAB("), numeric_expression, char!(')')),
         PrintItem::TabCall
     ));
 
-named!(print_separator<Span, PrintItem>,
+fn print_separator<Span, PrintItem>,
     terminated!(preceded!(space0, alt!(
         char!(',') => { |_| PrintItem::Comma } |
         char!(';') => { |_| PrintItem::Semicolon }
@@ -639,48 +650,48 @@ named!(print_separator<Span, PrintItem>,
 
 // 15. INPUT statement
 
-named!(input_statement<Span, Statement>,
+fn input_statement<Span, Statement>,
     do_parse!(
         tag!("INPUT") >>
-        space >>
+        space1 >>
         variables: separated_nonempty_list!(char!(','), variable) >>
         (Statement::Input(variables))
     )
 );
 
-named!(pub input_reply<Span, Vec<Datum>>,
+fn pub input_reply<Span, Vec<Datum>>,
     separated_nonempty_list!(
         char!(','), delimited!(space0, datum, space0)));
 
 // 16. READ and RESTORE statements
 
-named!(read_statement<Span, Statement>,
+fn read_statement<Span, Statement>,
     do_parse!(
         tag!("READ") >>
-        space >>
+        space1 >>
         variables: separated_nonempty_list!(char!(','), variable) >>
         (Statement::Read(variables))
     )
 );
 
-named!(restore_statement<Span, Statement>,
+fn restore_statement<Span, Statement>,
     map!(tag!("RESTORE"), |_| Statement::Restore));
 
 // 17. DATA statement
 
-named!(data_statement<Span, Statement>,
+fn data_statement<Span, Statement>,
     do_parse!(
         tag!("DATA") >>
-        space >>
+        space1 >>
         data: data_list >>
         (Statement::Data(data))
     ));
 
-named!(data_list<Span, Vec<Datum>>,
+fn data_list<Span, Vec<Datum>>,
     separated_nonempty_list!(
         delimited!(space0, char!(','), space0), datum));
 
-named!(datum<Span, Datum>,
+fn datum<Span, Datum>,
     alt!(
         map!(unquoted_string, |s| Datum::Unquoted(StringConstant(s))) |
         map!(string_constant, Datum::Quoted)
@@ -688,16 +699,16 @@ named!(datum<Span, Datum>,
 
 // 18. ARRAY declarations
 
-named!(dimension_statement<Span, Statement>,
+fn dimension_statement<Span, Statement>,
     do_parse!(
         tag!("DIM") >>
-        space >>
+        space1 >>
         array_declarations: separated_nonempty_list!(
             delimited!(space0, char!(','), space0), array_declaration) >>
         (Statement::Dim(array_declarations))
     ));
 
-named!(array_declaration<Span, ArrayDeclaration>,
+fn array_declaration<Span, ArrayDeclaration>,
     do_parse!(
         letter: letter >>
         char!('(') >>
@@ -706,22 +717,22 @@ named!(array_declaration<Span, ArrayDeclaration>,
         (ArrayDeclaration{ letter, bounds })
     ));
 
-named!(bounds<Span, (u64, Option<u64>)>,
+fn bounds<Span, (u64, Option<u64>)>,
     pair!(integer, opt!(preceded!(char!(','), integer))));
 
-named!(option_base_statement<Span, Statement>,
+fn option_base_statement<Span, Statement>,
     do_parse!(
         tag!("OPTION") >>
-        space >>
+        space1 >>
         tag!("BASE") >>
-        space >>
+        space1 >>
         n: alt!(char!('0') | char!('1')) >>
         (Statement::OptionBase(if n == '0' { OptionBase::Base0 } else { OptionBase::Base1 }))
     ));
 
 // 19. REMARK statement
 
-named!(remark_statement<Span, Statement>,
+fn remark_statement<Span, Statement>,
     do_parse!(
         tag!("REM") >>
         take_until!("\n") >>

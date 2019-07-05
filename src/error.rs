@@ -1,6 +1,4 @@
 use nom;
-use nom::simple_errors::Context;
-use nom::types::CompleteStr;
 
 use crate::ast::NextLine;
 use crate::parser::{self, Span};
