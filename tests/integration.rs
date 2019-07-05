@@ -352,7 +352,7 @@ test_program!(P173);
 try_test_program!(P174);
 try_test_program!(P175);
 test_program!(P176);
-try_test_program!(P177);
+test_program!(P177);
 try_test_program!(P178);
 test_program!(P179);
 test_program!(P180);
