@@ -632,8 +632,84 @@ fn stop_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, as
 // 13. FOR and NEXT statements
 
 fn for_block<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Block, E> {
-    // not implemented yet
-    Err(nom5::Err::Error(E::from_error_kind(i, ErrorKind::Fix)))
+    map(
+        pair(for_line, for_body),
+        |(for_line, (blocks, next_line))| ast::Block::For {
+            for_line,
+            blocks,
+            next_line,
+        },
+    )(i)
+}
+
+fn for_body<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, (Vec<ast::Block>, ast::NextLine), E> {
+    // TODO: Note that our block definition always contains a single line, therefore we parse
+    // several blocks here, which is different to the rule from the spec.
+    pair(many0(block), next_line)(i)
+}
+
+fn for_line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::ForLine, E> {
+    map(
+        tuple((
+            terminated(line_number, space1),
+            terminated(for_statement, space0),
+            end_of_line,
+        )),
+        |(line_number, for_statement, _)| ast::ForLine {
+            line_number,
+            for_statement,
+            statement_source: DUMMY_SPAN,
+        },
+    )(i)
+}
+
+fn next_line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::NextLine, E> {
+    map(
+        tuple((
+            terminated(line_number, space1),
+            terminated(next_statement, space0),
+            end_of_line,
+        )),
+        |(line_number, next_statement, _)| ast::NextLine {
+            line_number,
+            next_statement,
+            statement_source: DUMMY_SPAN,
+        },
+    )(i)
+}
+
+fn for_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::ForStatement, E> {
+    let for_tag = terminated(tag("FOR"), space1);
+    let equal_sign = preceded(space0, terminated(char('='), space0));
+    let to_tag = preceded(space1, terminated(tag("TO"), space1));
+    let step_tag = preceded(space1, terminated(tag("STEP"), space1));
+
+    map(
+        tuple((
+            preceded(for_tag, simple_numeric_variable),
+            preceded(equal_sign, numeric_expression),
+            preceded(to_tag, numeric_expression),
+            opt(preceded(step_tag, numeric_expression)),
+        )),
+        |(control_variable, initial_value, limit, increment)| ast::ForStatement {
+            control_variable,
+            initial_value,
+            limit,
+            increment,
+        },
+    )(i)
+}
+
+fn next_statement<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::NextStatement, E> {
+    let next_tag = terminated(tag("NEXT"), space1);
+    map(
+        preceded(next_tag, simple_numeric_variable),
+        |control_variable| ast::NextStatement { control_variable },
+    )(i)
 }
 
 // 19. REMARK statement
@@ -722,6 +798,14 @@ mod tests {
         if_then_statement::<VerboseError<&str>>("IF X > Y+83 THEN 200").expect("failed to parse");
         if_then_statement::<VerboseError<&str>>("IF A$ <> B$ THEN 550").expect("failed to parse");
         on_goto_statement::<VerboseError<&str>>("ON L+1 GO TO 300,400,500")
+            .expect("failed to parse");
+    }
+
+    #[test]
+    fn test_for_and_next_statement_examples() {
+        for_block::<VerboseError<&str>>("100 FOR I = 1 TO 10\n200 NEXT I\n")
+            .expect("failed to parse");
+        for_block::<VerboseError<&str>>("100 FOR I = A TO B STEP -1\n200 NEXT I\n")
             .expect("failed to parse");
     }
 }
