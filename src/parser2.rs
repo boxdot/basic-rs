@@ -10,7 +10,7 @@ use nom5::{
     character::complete::{char, one_of, space0, space1},
     combinator::{map, map_res, opt},
     error::{ErrorKind, ParseError},
-    multi::many0,
+    multi::{many0, separated_nonempty_list},
     sequence::{pair, preceded, terminated, tuple},
     IResult,
 };
@@ -513,6 +513,122 @@ fn string_let_statement<'a, E: ParseError<&'a str>>(
     )(i)
 }
 
+// 12. Control statements
+
+fn goto_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+    let go = terminated(tag("GO"), space1);
+    let to = terminated(tag("TO"), space1);
+    map(
+        preceded(go, preceded(to, line_number)),
+        ast::Statement::Goto,
+    )(i)
+}
+
+fn if_then_statement<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::Statement, E> {
+    let if_tag = terminated(tag("IF"), space1);
+    let if_statement = terminated(relational_expression, space1);
+    let then_tag = terminated(tag("THEN"), space1);
+    map(
+        tuple((if_tag, if_statement, then_tag, line_number)),
+        |(_, if_statement, _, line_number)| ast::Statement::IfThen(if_statement, line_number),
+    )(i)
+}
+
+fn relational_expression<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::RelationalExpression, E> {
+    let relation = preceded(space1, terminated(relation, space1));
+    let equality_relation = preceded(space1, terminated(equality_relation, space1));
+    alt((
+        map(
+            tuple((numeric_expression, relation, numeric_expression)),
+            |(left_expression, relation, right_expression)| {
+                ast::RelationalExpression::NumericComparison(
+                    left_expression,
+                    relation,
+                    right_expression,
+                )
+            },
+        ),
+        map(
+            tuple((string_expression, equality_relation, string_expression)),
+            |(left_expression, relation, right_expression)| {
+                ast::RelationalExpression::StringComparison(
+                    left_expression,
+                    relation,
+                    right_expression,
+                )
+            },
+        ),
+    ))(i)
+}
+
+fn relation<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Relation, E> {
+    alt((
+        map(tag("=="), |_| ast::Relation::EqualTo),
+        map(tag("="), |_| ast::Relation::EqualTo),
+        map(tag("<>"), |_| ast::Relation::NotEqualTo),
+        map(tag("<="), |_| ast::Relation::LessThanOrEqualTo),
+        map(tag(">="), |_| ast::Relation::GreaterThanOrEqualTo),
+        map(tag("<"), |_| ast::Relation::LessThan),
+        map(tag(">"), |_| ast::Relation::GreaterThan),
+    ))(i)
+}
+
+fn equality_relation<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::EqualityRelation, E> {
+    alt((
+        map(tag("=="), |_| ast::EqualityRelation::EqualTo),
+        map(tag("="), |_| ast::EqualityRelation::EqualTo),
+        map(tag("<>"), |_| ast::EqualityRelation::NotEqualTo),
+    ))(i)
+}
+
+fn gosub_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+    let go = terminated(tag("GO"), space1);
+    let to = terminated(tag("TO"), space1);
+    map(
+        preceded(go, preceded(to, line_number)),
+        ast::Statement::Gosub,
+    )(i)
+}
+
+fn return_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+    map(tag("RETURN"), |_| ast::Statement::Return)(i)
+}
+
+fn on_goto_statement<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::Statement, E> {
+    let on = terminated(tag("ON"), space1);
+    let go = terminated(tag("GO"), space1);
+    let to = terminated(tag("TO"), space1);
+
+    let numeric_expression = terminated(numeric_expression, space1);
+    let line_numbers =
+        separated_nonempty_list(preceded(space0, terminated(char(','), space0)), line_number);
+
+    map(
+        pair(
+            preceded(on, numeric_expression),
+            preceded(go, preceded(to, line_numbers)),
+        ),
+        |(numeric_expression, line_numbers)| {
+            ast::Statement::OnGoto(ast::OnGotoStatement {
+                numeric_expression,
+                line_numbers,
+            })
+        },
+    )(i)
+}
+
+fn stop_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+    map(tag("STOP"), |_| ast::Statement::Stop)(i)
+}
+
 // 13. FOR and NEXT statements
 
 fn for_block<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Block, E> {
@@ -598,5 +714,14 @@ mod tests {
         // let_statement::<VerboseError<&str>>("LET A(X,3) = SIN(X)*Y + 1").expect("failed to parse");
         let_statement::<VerboseError<&str>>("LET A$ = \"ABC\"").expect("failed to parse");
         let_statement::<VerboseError<&str>>("LET A$ = B$").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_control_statement_examples() {
+        goto_statement::<VerboseError<&str>>("GO TO 999").expect("failed to parse");
+        if_then_statement::<VerboseError<&str>>("IF X > Y+83 THEN 200").expect("failed to parse");
+        if_then_statement::<VerboseError<&str>>("IF A$ <> B$ THEN 550").expect("failed to parse");
+        on_goto_statement::<VerboseError<&str>>("ON L+1 GO TO 300,400,500")
+            .expect("failed to parse");
     }
 }
