@@ -268,6 +268,64 @@ fn string_constant<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &
     quoted_string(i)
 }
 
+// 7. Variables
+
+fn variable<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Variable, E> {
+    alt((
+        map(string_variable, ast::Variable::String),
+        map(numeric_variable, ast::Variable::Numeric),
+    ))(i)
+}
+
+fn numeric_variable<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::NumericVariable, E> {
+    alt((
+        map(simple_numeric_variable, ast::NumericVariable::Simple),
+        map(numeric_array_element, ast::NumericVariable::Array),
+    ))(i)
+}
+
+fn simple_numeric_variable<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::SimpleNumericVariable, E> {
+    map(
+        pair(letter, opt(map(digit, |c| c as u8 - b'0'))),
+        |(letter, digit)| ast::SimpleNumericVariable { letter, digit },
+    )(i)
+}
+
+fn numeric_array_element<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::ArrayVariable, E> {
+    map(
+        pair(numeric_array_name, subscript),
+        |(letter, subscript)| ast::ArrayVariable { letter, subscript },
+    )(i)
+}
+
+fn numeric_array_name<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, char, E> {
+    letter(i)
+}
+
+fn subscript<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, (ast::NumericExpression, Option<ast::NumericExpression>), E> {
+    // not implemented yet
+    Err(nom5::Err::Error(E::from_error_kind(i, ErrorKind::Fix)))
+    // let inner = pair(
+    //     numeric_expression,
+    //     opt(preceded(char(','), numeric_expression)),
+    // );
+    // preceded(char('('), terminated(inner, char(')')))(i)
+}
+
+fn string_variable<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::StringVariable, E> {
+    map(terminated(letter, char('$')), ast::StringVariable)(i)
+}
+
 // 13. FOR and NEXT statements
 
 fn for_block<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Block, E> {
@@ -299,8 +357,35 @@ mod tests {
     #[test]
     fn test_end_proram() {
         let res = program::<VerboseError<&str>>("999 END");
-        let (remaining, value) = res.expect("failed to parse");
+        let (_, value) = res.expect("failed to parse");
         let program = value.expect("invalid program");
         assert_eq!(program.blocks.len(), 1);
+    }
+
+    #[test]
+    fn test_variables_exampes() {
+        let (_, v) = variable::<VerboseError<&str>>("X").expect("failed to parse");
+        assert_eq!(
+            v,
+            ast::Variable::Numeric(ast::NumericVariable::Simple(ast::SimpleNumericVariable {
+                letter: 'X',
+                digit: None,
+            })),
+        );
+
+        let (_, v) = variable::<VerboseError<&str>>("A5").expect("failed to parse");
+        assert_eq!(
+            v,
+            ast::Variable::Numeric(ast::NumericVariable::Simple(ast::SimpleNumericVariable {
+                letter: 'A',
+                digit: Some(5),
+            })),
+        );
+
+        let (_, v) = variable::<VerboseError<&str>>("S$").expect("failed to parse");
+        assert_eq!(v, ast::Variable::String(ast::StringVariable('S')));
+
+        let (_, v) = variable::<VerboseError<&str>>("C$").expect("failed to parse");
+        assert_eq!(v, ast::Variable::String(ast::StringVariable('C')));
     }
 }
