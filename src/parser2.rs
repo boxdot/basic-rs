@@ -264,8 +264,11 @@ fn exrad<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, i32, E> {
     )(i)
 }
 
-fn string_constant<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
-    quoted_string(i)
+fn string_constant<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::StringConstant, E> {
+    // TODO: Avoid cloning here
+    map(quoted_string, |s| ast::StringConstant(s.to_string()))(i)
 }
 
 // 7. Variables
@@ -326,6 +329,117 @@ fn string_variable<'a, E: ParseError<&'a str>>(
     map(terminated(letter, char('$')), ast::StringVariable)(i)
 }
 
+// 8. Expressions
+
+fn expression<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Expression, E> {
+    alt((
+        map(string_expression, ast::Expression::String),
+        map(numeric_expression, ast::Expression::Numeric),
+    ))(i)
+}
+
+fn numeric_expression<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::NumericExpression, E> {
+    let leading_sign = terminated(opt(sign), space0);
+    let leading_term = term;
+    let terms = many0(pair(preceded(space0, sign), preceded(space0, term)));
+    map(
+        tuple((leading_sign, leading_term, terms)),
+        |(leading_sign, leading_term, terms)| {
+            ast::NumericExpression::new(leading_sign, leading_term, terms)
+        },
+    )(i)
+}
+
+fn term<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Term, E> {
+    let factors = many0(pair(preceded(space0, multiplier), preceded(space0, factor)));
+    map(pair(factor, factors), |(leading_factor, factors)| {
+        ast::Term::new(leading_factor, factors)
+    })(i)
+}
+
+fn factor<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Factor, E> {
+    let primaries = many0(preceded(
+        preceded(space0, char('^')),
+        preceded(space0, primary),
+    ));
+    map(pair(primary, primaries), |(leading_primary, primaries)| {
+        ast::Factor::new(leading_primary, primaries)
+    })(i)
+}
+
+fn multiplier<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Multiplier, E> {
+    alt((
+        map(char('*'), |_| ast::Multiplier::Mul),
+        map(char('/'), |_| ast::Multiplier::Div),
+    ))(i)
+}
+
+fn primary<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Primary, E> {
+    alt((
+        map(numeric_function_ref, ast::Primary::Function),
+        map(numeric_defined_function_ref, ast::Primary::DefFunctionCall),
+        map(numeric_variable, ast::Primary::Variable),
+        map(numeric_rep, |value| {
+            ast::Primary::Constant(ast::NumericConstant::from(value))
+        }),
+        map(
+            preceded(char('('), terminated(numeric_expression, char(')'))),
+            ast::Primary::Expression,
+        ),
+    ))(i)
+}
+
+fn numeric_function_ref<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::Function, E> {
+    alt((
+        map(preceded(tag("ABS"), argument_list), ast::Function::Abs),
+        map(preceded(tag("ATN"), argument_list), ast::Function::Atn),
+        map(preceded(tag("COS"), argument_list), ast::Function::Cos),
+        map(preceded(tag("EXP"), argument_list), ast::Function::Exp),
+        map(preceded(tag("INT"), argument_list), ast::Function::Int),
+        map(preceded(tag("LOG"), argument_list), ast::Function::Log),
+        map(tag("RND"), |_| ast::Function::Rnd),
+        map(preceded(tag("SGN"), argument_list), ast::Function::Sgn),
+        map(preceded(tag("SIN"), argument_list), ast::Function::Sin),
+        map(preceded(tag("SQR"), argument_list), ast::Function::Sqr),
+        map(preceded(tag("TAN"), argument_list), ast::Function::Tan),
+    ))(i)
+}
+
+fn numeric_defined_function_ref<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::DefFunctionCall, E> {
+    map(
+        pair(numeric_defined_function, opt(argument_list)),
+        |(name, arg)| ast::DefFunctionCall { name, arg },
+    )(i)
+}
+
+fn argument_list<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::NumericExpression, E> {
+    preceded(char('('), terminated(numeric_expression, char(')')))(i)
+}
+
+fn string_expression<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::StringExpression, E> {
+    alt((
+        map(string_variable, ast::StringExpression::Variable),
+        map(string_constant, ast::StringExpression::Constant),
+    ))(i)
+}
+
+// 10. User defined functions
+
+fn numeric_defined_function<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, char, E> {
+    // not implemented yet
+    Err(nom5::Err::Error(E::from_error_kind(i, ErrorKind::Fix)))
+}
+
 // 13. FOR and NEXT statements
 
 fn for_block<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Block, E> {
@@ -363,7 +477,7 @@ mod tests {
     }
 
     #[test]
-    fn test_variables_exampes() {
+    fn test_variable_exampes() {
         let (_, v) = variable::<VerboseError<&str>>("X").expect("failed to parse");
         assert_eq!(
             v,
@@ -387,5 +501,14 @@ mod tests {
 
         let (_, v) = variable::<VerboseError<&str>>("C$").expect("failed to parse");
         assert_eq!(v, ast::Variable::String(ast::StringVariable('C')));
+    }
+
+    #[test]
+    fn test_expression_examples() {
+        expression::<VerboseError<&str>>("3*X - Y^2").expect("failed to parse");
+        // expression::<VerboseError<&str>>("A(1)+A(2)+A(3)").expect("failed to parse");
+        expression::<VerboseError<&str>>("2^(-X)").expect("failed to parse");
+        expression::<VerboseError<&str>>("-X/Y").expect("failed to parse");
+        expression::<VerboseError<&str>>("SQR(X^2+Y^2)").expect("failed to parse");
     }
 }
