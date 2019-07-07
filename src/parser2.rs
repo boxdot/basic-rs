@@ -1,13 +1,26 @@
 use crate::ast;
+use crate::error;
+
+use nom::types::CompleteStr;
+use nom_locate::LocatedSpan;
 
 use nom5::{
     branch::alt,
-    bytes::complete::{take_while, take_while1, take_while_m_n},
-    character::complete::{char, one_of},
+    bytes::complete::{tag, take_until, take_while, take_while1, take_while_m_n},
+    character::complete::{char, one_of, space0, space1},
     combinator::{map, map_res, opt},
-    error::ParseError,
+    error::{ErrorKind, ParseError},
+    multi::many0,
     sequence::{pair, preceded, terminated, tuple},
     IResult,
+};
+
+// We use this constant to populate our ast which requires a span to be included.
+// Later we should remove it in favor of proper nom 5 error handling.
+const DUMMY_SPAN: LocatedSpan<CompleteStr<'static>> = LocatedSpan {
+    offset: 0,
+    line: 1,
+    fragment: CompleteStr(""),
 };
 
 fn full_stop<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, char, E> {
@@ -120,6 +133,73 @@ fn unquoted<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str,
 
 // 5. Programs
 
+fn program<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, Result<ast::Program<'a>, error::Error>, E> {
+    map(pair(many0(block), end_line), |(mut blocks, end_line)| {
+        blocks.push(end_line);
+        ast::Program::new(blocks, i)
+    })(i)
+}
+
+// FIXME: This rule is different from the rule in the spec in the sense that a block consists of
+// many lines and not a single one.
+fn block<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Block<'a>, E> {
+    alt((line, for_block))(i)
+}
+
+fn line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Block<'a>, E> {
+    map(
+        tuple((
+            terminated(line_number, space1),
+            terminated(statement, space0),
+            end_of_line,
+        )),
+        |(line_number, statement, _)| ast::Block::Line {
+            line_number,
+            statement,
+            statement_source: DUMMY_SPAN,
+        },
+    )(i)
+}
+
+fn line_number<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, u16, E> {
+    map_res(take_while_m_n(1, 4, is_digit), |digits| {
+        u16::from_str_radix(digits, 10)
+    })(i)
+}
+
+fn end_of_line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, (), E> {
+    if i.len() == 0 {
+        Ok((i, ())) // EOF
+    } else {
+        map(char('\n'), |_| ())(i)
+    }
+}
+
+fn end_line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Block, E> {
+    map(
+        tuple((
+            terminated(line_number, space1),
+            terminated(end_statement, space0),
+            end_of_line,
+        )),
+        |(line_number, statement, _)| ast::Block::Line {
+            line_number,
+            statement,
+            statement_source: DUMMY_SPAN,
+        },
+    )(i)
+}
+
+fn end_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+    map(tag("END"), |_| ast::Statement::End)(i)
+}
+
+fn statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+    remark_statement(i)
+}
+
 // 6. Constants
 
 fn numeric_constant<'a, E: ParseError<&'a str>>(
@@ -188,6 +268,21 @@ fn string_constant<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &
     quoted_string(i)
 }
 
+// 13. FOR and NEXT statements
+
+fn for_block<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Block, E> {
+    // not implemented yet
+    Err(nom5::Err::Error(E::from_error_kind(i, ErrorKind::Fix)))
+}
+
+// 19. REMARK statement
+
+fn remark_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+    map(terminated(tag("REM"), take_until("\n")), |_| {
+        ast::Statement::Rem
+    })(i)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,5 +294,13 @@ mod tests {
         let (remaining, value) = res.expect("failed to parse");
         assert!(remaining.is_empty(), "Remaing is not empty: {}", remaining);
         assert_eq!(value, ast::NumericConstant::from((-123456f64, -29)));
+    }
+
+    #[test]
+    fn test_end_proram() {
+        let res = program::<VerboseError<&str>>("999 END");
+        let (remaining, value) = res.expect("failed to parse");
+        let program = value.expect("invalid program");
+        assert_eq!(program.blocks.len(), 1);
     }
 }
