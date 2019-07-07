@@ -433,11 +433,47 @@ fn string_expression<'a, E: ParseError<&'a str>>(
     ))(i)
 }
 
+// 9. Implementation supplied functions
+//
+// The only rule `numeric_supplied_function` is merged with `numeric_function_ref`.
+
 // 10. User defined functions
 
+fn def_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+    let def = terminated(tag("DEF"), space1);
+    let equal_sign = preceded(space0, terminated(char('='), space0));
+    map(
+        tuple((
+            def,
+            numeric_defined_function,
+            opt(parameter_list),
+            equal_sign,
+            numeric_expression,
+        )),
+        |(_, name, parameter, _, expression)| {
+            ast::Statement::Def(ast::DefFunction {
+                name,
+                parameter,
+                expression,
+            })
+        },
+    )(i)
+}
+
 fn numeric_defined_function<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, char, E> {
-    // not implemented yet
-    Err(nom5::Err::Error(E::from_error_kind(i, ErrorKind::Fix)))
+    preceded(tag("FN"), letter)(i)
+}
+
+fn parameter_list<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::SimpleNumericVariable, E> {
+    preceded(char('('), terminated(parameter, char(')')))(i)
+}
+
+fn parameter<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::SimpleNumericVariable, E> {
+    simple_numeric_variable(i)
 }
 
 // 13. FOR and NEXT statements
@@ -510,5 +546,12 @@ mod tests {
         expression::<VerboseError<&str>>("2^(-X)").expect("failed to parse");
         expression::<VerboseError<&str>>("-X/Y").expect("failed to parse");
         expression::<VerboseError<&str>>("SQR(X^2+Y^2)").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_user_defined_function_examples() {
+        def_statement::<VerboseError<&str>>("DEF FNF(X) = X^4 - 1").expect("failed to parse");
+        def_statement::<VerboseError<&str>>("DEF FNP = 3.14159").expect("failed to parse");
+        def_statement::<VerboseError<&str>>("DEF FNA(X) = A*X + B").expect("failed to parse");
     }
 }
