@@ -476,6 +476,43 @@ fn parameter<'a, E: ParseError<&'a str>>(
     simple_numeric_variable(i)
 }
 
+// 11. LET statement
+
+fn let_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+    map(
+        alt((numeric_let_statement, string_let_statement)),
+        ast::Statement::Let,
+    )(i)
+}
+
+fn numeric_let_statement<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::LetStatement, E> {
+    let let_tag = terminated(tag("LET"), space1);
+    let equal_sign = preceded(space0, terminated(char('='), space0));
+    map(
+        tuple((let_tag, numeric_variable, equal_sign, numeric_expression)),
+        |(_, variable, _, expression)| ast::LetStatement::Numeric {
+            variable,
+            expression,
+        },
+    )(i)
+}
+
+fn string_let_statement<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::LetStatement, E> {
+    let let_tag = terminated(tag("LET"), space1);
+    let equal_sign = preceded(space0, terminated(char('='), space0));
+    map(
+        tuple((let_tag, string_variable, equal_sign, string_expression)),
+        |(_, variable, _, expression)| ast::LetStatement::String {
+            variable,
+            expression,
+        },
+    )(i)
+}
+
 // 13. FOR and NEXT statements
 
 fn for_block<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Block, E> {
@@ -553,5 +590,13 @@ mod tests {
         def_statement::<VerboseError<&str>>("DEF FNF(X) = X^4 - 1").expect("failed to parse");
         def_statement::<VerboseError<&str>>("DEF FNP = 3.14159").expect("failed to parse");
         def_statement::<VerboseError<&str>>("DEF FNA(X) = A*X + B").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_let_statement_examples() {
+        let_statement::<VerboseError<&str>>("LET P = 3.14159").expect("failed to parse");
+        // let_statement::<VerboseError<&str>>("LET A(X,3) = SIN(X)*Y + 1").expect("failed to parse");
+        let_statement::<VerboseError<&str>>("LET A$ = \"ABC\"").expect("failed to parse");
+        let_statement::<VerboseError<&str>>("LET A$ = B$").expect("failed to parse");
     }
 }
