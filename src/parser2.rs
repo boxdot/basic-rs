@@ -118,7 +118,7 @@ fn quoted_string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a
     )(i)
 }
 
-fn unquoted<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
+fn unquoted_string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
     alt((
         preceded(
             plain_string_character,
@@ -757,6 +757,45 @@ fn print_separator<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, a
     preceded(space0, terminated(separator, space0))(i)
 }
 
+// 15. INPUT statement
+
+fn input_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+    let input_tag = terminated(tag("INPUT"), space1);
+    let separator = preceded(space0, terminated(char(','), space0));
+    let variables = separated_nonempty_list(separator, variable);
+    map(preceded(input_tag, variables), ast::Statement::Input)(i)
+}
+
+pub fn input_reply<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Vec<ast::Datum>, E> {
+    let padded_datum = preceded(space0, terminated(datum, space0));
+    separated_nonempty_list(char(','), padded_datum)(i)
+}
+
+fn datum<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Datum, E> {
+    // TODO: Avoid using owned string.
+    alt((
+        map(unquoted_string, |s| {
+            ast::Datum::Unquoted(ast::StringConstant(s.to_string()))
+        }),
+        map(string_constant, ast::Datum::Quoted),
+    ))(i)
+}
+
+// 16. READ and RESTORE statements
+
+fn read_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+    let read_tag = terminated(tag("READ"), space1);
+    let separator = preceded(space0, terminated(char(','), space0));
+    let variables = separated_nonempty_list(separator, variable);
+    map(preceded(read_tag, variables), ast::Statement::Read)(i)
+}
+
+fn restore_statement<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::Statement, E> {
+    map(tag("RESTORE"), |_| ast::Statement::Restore)(i)
+}
+
 // 19. REMARK statement
 
 fn remark_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
@@ -864,5 +903,25 @@ mod tests {
         print_statement::<VerboseError<&str>>("PRINT \"X EQUALS\", 10").expect("failed to parse");
         print_statement::<VerboseError<&str>>("PRINT X, Y").expect("failed to parse");
         print_statement::<VerboseError<&str>>("PRINT ,,,X").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_input_statement_examples() {
+        input_statement::<VerboseError<&str>>("INPUT X").expect("failed to parse");
+        // input_statement::<VerboseError<&str>>("INPUT X, A$, Y(2)").expect("failed to parse");
+        input_statement::<VerboseError<&str>>("INPUT A, B, C").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_input_reply_examples() {
+        input_reply::<VerboseError<&str>>("3.14159").expect("failed to parse");
+        input_reply::<VerboseError<&str>>("2,SMITH,-3").expect("failed to parse");
+        input_reply::<VerboseError<&str>>("25,0,-15").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_read_statement_examples() {
+        read_statement::<VerboseError<&str>>("READ X, Y, Z").expect("failed to parse");
+        // read_statement::<VerboseError<&str>>("READ X(1), A$, C").expect("failed to parse");
     }
 }
