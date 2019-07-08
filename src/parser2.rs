@@ -284,8 +284,8 @@ fn numeric_variable<'a, E: ParseError<&'a str>>(
     i: &'a str,
 ) -> IResult<&'a str, ast::NumericVariable, E> {
     alt((
-        map(simple_numeric_variable, ast::NumericVariable::Simple),
         map(numeric_array_element, ast::NumericVariable::Array),
+        map(simple_numeric_variable, ast::NumericVariable::Simple),
     ))(i)
 }
 
@@ -314,13 +314,11 @@ fn numeric_array_name<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str
 fn subscript<'a, E: ParseError<&'a str>>(
     i: &'a str,
 ) -> IResult<&'a str, (ast::NumericExpression, Option<ast::NumericExpression>), E> {
-    // not implemented yet
-    Err(nom5::Err::Error(E::from_error_kind(i, ErrorKind::Fix)))
-    // let inner = pair(
-    //     numeric_expression,
-    //     opt(preceded(char(','), numeric_expression)),
-    // );
-    // preceded(char('('), terminated(inner, char(')')))(i)
+    let inner = pair(
+        numeric_expression,
+        opt(preceded(char(','), numeric_expression)),
+    );
+    preceded(char('('), terminated(inner, char(')')))(i)
 }
 
 fn string_variable<'a, E: ParseError<&'a str>>(
@@ -796,6 +794,43 @@ fn restore_statement<'a, E: ParseError<&'a str>>(
     map(tag("RESTORE"), |_| ast::Statement::Restore)(i)
 }
 
+// 18. ARRAY declarations
+
+fn dimension_statement<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::Statement, E> {
+    let dim_tag = terminated(tag("DIM"), space1);
+    let separator = preceded(space0, terminated(char(','), space0));
+    let array_declarations = separated_nonempty_list(separator, array_declaration);
+    map(preceded(dim_tag, array_declarations), ast::Statement::Dim)(i)
+}
+
+fn array_declaration<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::ArrayDeclaration, E> {
+    map(
+        pair(letter, preceded(char('('), terminated(bounds, char(')')))),
+        |(letter, bounds)| ast::ArrayDeclaration { letter, bounds },
+    )(i)
+}
+
+fn bounds<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, (u64, Option<u64>), E> {
+    pair(integer, opt(preceded(char(','), integer)))(i)
+}
+
+fn option_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+    let option_tag = terminated(tag("OPTION"), space1);
+    let base_tag = terminated(tag("BASE"), space1);
+    let n = alt((
+        map(char('0'), |_| ast::OptionBase::Base0),
+        map(char('1'), |_| ast::OptionBase::Base1),
+    ));
+    map(
+        preceded(option_tag, preceded(base_tag, n)),
+        ast::Statement::OptionBase,
+    )(i)
+}
+
 // 17. DATA statement
 
 fn data_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
@@ -867,7 +902,7 @@ mod tests {
     #[test]
     fn test_expression_examples() {
         expression::<VerboseError<&str>>("3*X - Y^2").expect("failed to parse");
-        // expression::<VerboseError<&str>>("A(1)+A(2)+A(3)").expect("failed to parse");
+        expression::<VerboseError<&str>>("A(1)+A(2)+A(3)").expect("failed to parse");
         expression::<VerboseError<&str>>("2^(-X)").expect("failed to parse");
         expression::<VerboseError<&str>>("-X/Y").expect("failed to parse");
         expression::<VerboseError<&str>>("SQR(X^2+Y^2)").expect("failed to parse");
@@ -883,7 +918,7 @@ mod tests {
     #[test]
     fn test_let_statement_examples() {
         let_statement::<VerboseError<&str>>("LET P = 3.14159").expect("failed to parse");
-        // let_statement::<VerboseError<&str>>("LET A(X,3) = SIN(X)*Y + 1").expect("failed to parse");
+        let_statement::<VerboseError<&str>>("LET A(X,3) = SIN(X)*Y + 1").expect("failed to parse");
         let_statement::<VerboseError<&str>>("LET A$ = \"ABC\"").expect("failed to parse");
         let_statement::<VerboseError<&str>>("LET A$ = B$").expect("failed to parse");
     }
@@ -920,7 +955,7 @@ mod tests {
     #[test]
     fn test_input_statement_examples() {
         input_statement::<VerboseError<&str>>("INPUT X").expect("failed to parse");
-        // input_statement::<VerboseError<&str>>("INPUT X, A$, Y(2)").expect("failed to parse");
+        input_statement::<VerboseError<&str>>("INPUT X, A$, Y(2)").expect("failed to parse");
         input_statement::<VerboseError<&str>>("INPUT A, B, C").expect("failed to parse");
     }
 
@@ -934,12 +969,17 @@ mod tests {
     #[test]
     fn test_read_statement_examples() {
         read_statement::<VerboseError<&str>>("READ X, Y, Z").expect("failed to parse");
-        // read_statement::<VerboseError<&str>>("READ X(1), A$, C").expect("failed to parse");
+        read_statement::<VerboseError<&str>>("READ X(1), A$, C").expect("failed to parse");
     }
 
     #[test]
     fn test_data_statement_examples() {
         data_statement::<VerboseError<&str>>("DATA 3.14159, PI, 5E-10, \",\"")
             .expect("failed to parse");
+    }
+
+    #[test]
+    fn test_dimension_statement_examples() {
+        dimension_statement::<VerboseError<&str>>("DIM A(6), B(10, 10)").expect("failed to parse");
     }
 }
