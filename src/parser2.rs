@@ -712,6 +712,51 @@ fn next_statement<'a, E: ParseError<&'a str>>(
     )(i)
 }
 
+// 14. PRINT statement
+
+fn print_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+    let print_tag = tag("PRINT");
+    map(
+        preceded(print_tag, opt(preceded(space1, print_list))),
+        |list| {
+            ast::Statement::Print(ast::PrintStatement {
+                list: list.unwrap_or_else(Vec::new),
+            })
+        },
+    )(i)
+}
+
+fn print_list<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Vec<ast::PrintItem>, E> {
+    let items = many0(pair(opt(print_item), print_separator));
+    let trailing_item = opt(print_item);
+    map(pair(items, trailing_item), |(items, trailing_item)| {
+        ast::new_print_items(items, trailing_item)
+    })(i)
+}
+
+fn print_item<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::PrintItem, E> {
+    alt((
+        // Note: expression consumes T of TAB, therefore tab_call needs to be parsed first.
+        tab_call,
+        map(expression, ast::PrintItem::Expression),
+    ))(i)
+}
+
+fn tab_call<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::PrintItem, E> {
+    map(
+        preceded(tag("TAB("), terminated(numeric_expression, char(')'))),
+        ast::PrintItem::TabCall,
+    )(i)
+}
+
+fn print_separator<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::PrintItem, E> {
+    let separator = alt((
+        map(char(','), |_| ast::PrintItem::Comma),
+        map(char(';'), |_| ast::PrintItem::Semicolon),
+    ));
+    preceded(space0, terminated(separator, space0))(i)
+}
+
 // 19. REMARK statement
 
 fn remark_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
@@ -807,5 +852,17 @@ mod tests {
             .expect("failed to parse");
         for_block::<VerboseError<&str>>("100 FOR I = A TO B STEP -1\n200 NEXT I\n")
             .expect("failed to parse");
+    }
+
+    #[test]
+    fn test_print_statement_examples() {
+        print_statement::<VerboseError<&str>>("PRINT X").expect("failed to parse");
+        print_statement::<VerboseError<&str>>("PRINT X; (Y+Z)/2").expect("failed to parse");
+        print_statement::<VerboseError<&str>>("PRINT").expect("failed to parse");
+        print_statement::<VerboseError<&str>>("PRINT TAB(10); A$; \"IS DONE.\"")
+            .expect("failed to parse");
+        print_statement::<VerboseError<&str>>("PRINT \"X EQUALS\", 10").expect("failed to parse");
+        print_statement::<VerboseError<&str>>("PRINT X, Y").expect("failed to parse");
+        print_statement::<VerboseError<&str>>("PRINT ,,,X").expect("failed to parse");
     }
 }
