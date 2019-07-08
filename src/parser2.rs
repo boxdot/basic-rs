@@ -796,6 +796,18 @@ fn restore_statement<'a, E: ParseError<&'a str>>(
     map(tag("RESTORE"), |_| ast::Statement::Restore)(i)
 }
 
+// 17. DATA statement
+
+fn data_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+    let data_tag = terminated(tag("DATA"), space1);
+    map(preceded(data_tag, data_list), ast::Statement::Data)(i)
+}
+
+fn data_list<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Vec<ast::Datum>, E> {
+    let separator = preceded(space0, terminated(char(','), space0));
+    separated_nonempty_list(separator, datum)(i)
+}
+
 // 19. REMARK statement
 
 fn remark_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
@@ -923,5 +935,11 @@ mod tests {
     fn test_read_statement_examples() {
         read_statement::<VerboseError<&str>>("READ X, Y, Z").expect("failed to parse");
         // read_statement::<VerboseError<&str>>("READ X(1), A$, C").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_data_statement_examples() {
+        data_statement::<VerboseError<&str>>("DATA 3.14159, PI, 5E-10, \",\"")
+            .expect("failed to parse");
     }
 }
