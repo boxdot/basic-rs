@@ -6,10 +6,10 @@ use nom_locate::LocatedSpan;
 
 use nom5::{
     branch::alt,
-    bytes::complete::{tag, take_until, take_while, take_while1, take_while_m_n},
+    bytes::complete::{tag, take_while, take_while1, take_while_m_n},
     character::complete::{char, one_of, space0, space1},
     combinator::{map, map_res, opt},
-    error::{ErrorKind, ParseError},
+    error::ParseError,
     multi::{many0, separated_nonempty_list},
     sequence::{pair, preceded, terminated, tuple},
     IResult,
@@ -25,10 +25,6 @@ const DUMMY_SPAN: LocatedSpan<CompleteStr<'static>> = LocatedSpan {
 
 fn full_stop<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, char, E> {
     char('.')(i)
-}
-
-fn space<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, char, E> {
-    char(' ')(i)
 }
 
 fn is_space(c: char) -> bool {
@@ -67,16 +63,8 @@ fn is_digit(c: char) -> bool {
     }
 }
 
-fn string_character<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, char, E> {
-    alt((quotation_mark, quoted_string_character))(i)
-}
-
 fn is_string_character(c: char) -> bool {
     c == '"' || is_quoted_string_character(c)
-}
-
-fn quoted_string_character<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, char, E> {
-    alt((one_of("!#$%&'()*,/:;<=>?^_"), unquoted_string_character))(i)
 }
 
 fn is_quoted_string_character(c: char) -> bool {
@@ -86,10 +74,6 @@ fn is_quoted_string_character(c: char) -> bool {
         | '=' | '>' | '?' | '^' | '_' => true,
         other => is_unquoted_string_character(other),
     }
-}
-
-fn unquoted_string_character<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, char, E> {
-    alt((space, plain_string_character))(i)
 }
 
 fn is_unquoted_string_character(c: char) -> bool {
@@ -133,7 +117,7 @@ fn unquoted_string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &
 
 // 5. Programs
 
-fn program<'a, E: ParseError<&'a str>>(
+pub fn program<'a, E: ParseError<&'a str>>(
     i: &'a str,
 ) -> IResult<&'a str, Result<ast::Program<'a>, error::Error>, E> {
     map(pair(many0(block), end_line), |(mut blocks, end_line)| {
@@ -197,7 +181,25 @@ fn end_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast
 }
 
 fn statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
-    remark_statement(i)
+    alt((
+        goto_statement,
+        gosub_statement,
+        on_goto_statement,
+        if_then_statement,
+        def_statement,
+        let_statement,
+        print_statement,
+        return_statement,
+        stop_statement,
+        input_statement,
+        read_statement,
+        restore_statement,
+        data_statement,
+        remark_statement,
+        dimension_statement,
+        option_statement,
+        randomize_statement,
+    ))(i)
 }
 
 // 6. Constants
@@ -871,7 +873,7 @@ mod tests {
     }
 
     #[test]
-    fn test_end_proram() {
+    fn test_end_program() {
         let res = program::<VerboseError<&str>>("999 END");
         let (_, value) = res.expect("failed to parse");
         let program = value.expect("invalid program");
