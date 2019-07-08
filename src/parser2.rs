@@ -794,6 +794,18 @@ fn restore_statement<'a, E: ParseError<&'a str>>(
     map(tag("RESTORE"), |_| ast::Statement::Restore)(i)
 }
 
+// 17. DATA statement
+
+fn data_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+    let data_tag = terminated(tag("DATA"), space1);
+    map(preceded(data_tag, data_list), ast::Statement::Data)(i)
+}
+
+fn data_list<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Vec<ast::Datum>, E> {
+    let separator = preceded(space0, terminated(char(','), space0));
+    separated_nonempty_list(separator, datum)(i)
+}
+
 // 18. ARRAY declarations
 
 fn dimension_statement<'a, E: ParseError<&'a str>>(
@@ -831,24 +843,18 @@ fn option_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, 
     )(i)
 }
 
-// 17. DATA statement
-
-fn data_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
-    let data_tag = terminated(tag("DATA"), space1);
-    map(preceded(data_tag, data_list), ast::Statement::Data)(i)
-}
-
-fn data_list<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, Vec<ast::Datum>, E> {
-    let separator = preceded(space0, terminated(char(','), space0));
-    separated_nonempty_list(separator, datum)(i)
-}
-
 // 19. REMARK statement
 
 fn remark_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
-    map(terminated(tag("REM"), take_until("\n")), |_| {
-        ast::Statement::Rem
-    })(i)
+    map(preceded(tag("REM"), remark_string), |_| ast::Statement::Rem)(i)
+}
+
+// 20. RANDOMIZE statement
+
+fn randomize_statement<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, ast::Statement, E> {
+    map(tag("RANDOMIZE"), |_| ast::Statement::Randomize)(i)
 }
 
 #[cfg(test)]
@@ -981,5 +987,15 @@ mod tests {
     #[test]
     fn test_dimension_statement_examples() {
         dimension_statement::<VerboseError<&str>>("DIM A(6), B(10, 10)").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_remark_statement_examples() {
+        remark_statement::<VerboseError<&str>>("REMARK FINAL CHECK").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_randomize_statement_examples() {
+        randomize_statement::<VerboseError<&str>>("RANDOMIZE").expect("failed to parse");
     }
 }

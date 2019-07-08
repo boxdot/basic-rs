@@ -51,9 +51,7 @@ impl Default for State {
             array_values: Default::default(),
             stack: Default::default(),
             data_pointer: Default::default(),
-            rng: XorShiftRng::from_seed([
-                0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF,
-            ]),
+            rng: XorShiftRng::seed_from_u64(0x0123456789ABCDEF),
         }
     }
 }
@@ -62,9 +60,6 @@ impl State {
     fn new(array_values_len: usize) -> Self {
         Self {
             array_values: vec![0.0; array_values_len],
-            rng: XorShiftRng::from_seed([
-                0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF,
-            ]),
             ..Default::default()
         }
     }
@@ -214,6 +209,11 @@ impl<'a> Interpreter<'a> {
             Statement::End => Action::Stop,
             Statement::Dim(_) => Action::NextLine,
             Statement::OptionBase(_) => Action::NextLine,
+            Statement::Randomize => {
+                let new_seed = self.state.rng.gen();
+                self.state.rng = XorShiftRng::seed_from_u64(new_seed);
+                Action::NextLine
+            }
         };
         Ok(res)
     }

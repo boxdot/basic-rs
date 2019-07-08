@@ -608,6 +608,7 @@ pub enum Statement {
     End,
     Dim(Vec<ArrayDeclaration>),
     OptionBase(OptionBase),
+    Randomize,
 }
 
 #[derive(Debug, PartialEq)]
