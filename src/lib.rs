@@ -1,20 +1,11 @@
-#[macro_use]
-extern crate nom;
-#[macro_use]
-extern crate nom_locate;
-
 mod ast;
 mod error;
 mod format;
 mod interpreter;
-mod parser;
 mod parser2;
 
-use crate::interpreter::Interpreter;
-use nom::simple_errors::Context;
-use nom::types::CompleteStr;
-
 pub use crate::error::Error;
+use crate::interpreter::Interpreter;
 
 use std::io::{BufRead, Write};
 
@@ -24,24 +15,13 @@ pub fn execute<R: BufRead, W: Write, V: Write>(
     stdout: &mut W,
     stderr: &mut V,
 ) -> Result<(), Error> {
-    let res = parser::program(parser::Span::new(CompleteStr(input)));
-    match res {
-        Ok((remaining, ast)) => {
-            if !remaining.fragment.is_empty() {
-                write!(stderr, "{}", error::format_remaining(&remaining.fragment)?)?;
-                Ok(())
-            } else {
-                let ast = ast?;
-                let interpreter = Interpreter::new(&ast, input);
-                interpreter.evaluate(stdin, stdout, stderr)?;
-                Ok(())
-            }
-        }
-        Err(nom::Err::Failure(Context::Code(span, nom::ErrorKind::Custom(err_code)))) => {
-            let err_output = parser::ErrorCode::from(err_code).to_string(&span, input);
-            write!(stderr, "{}", err_output)?;
-            Ok(())
-        }
-        Err(e) => Err(Error::Parser(format!("parser error: {}", e))),
+    let (remaining, ast) = parser2::program(input)?;
+    if !remaining.is_empty() {
+        write!(stderr, "{}", error::format_remaining(&remaining)?)?;
+    } else {
+        let ast = ast?;
+        let interpreter = Interpreter::new(&ast, input);
+        interpreter.evaluate(stdin, stdout, stderr)?;
     }
+    Ok(())
 }

@@ -1,10 +1,10 @@
 use crate::ast::*;
 use crate::error::Error;
 use crate::format::format_float;
-use crate::parser;
+use crate::parser2;
 
 use itertools::Itertools;
-use nom::types::CompleteStr;
+use nom5::error::VerboseError;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 
@@ -14,16 +14,15 @@ use std::io::{self, BufRead, Write};
 
 pub struct Interpreter<'a> {
     program: &'a Program<'a>,
-    source_code: &'a str,
-    state: State,
+    state: State<'a>,
 }
 
 #[derive(Debug)]
-struct State {
+struct State<'a> {
     /// BASIC line number label of the current statement
     current_line_number: u16,
     /// Offset in the source code of the current statement
-    current_source_offset: usize,
+    current_source: &'a str,
     /// current columnar position of the cursor
     columnar_position: usize,
     /// values of numeric variables
@@ -40,27 +39,18 @@ struct State {
     rng: XorShiftRng,
 }
 
-impl Default for State {
-    fn default() -> Self {
+impl<'a> State<'a> {
+    fn new(array_values_len: usize, source_code: &'a str) -> Self {
         Self {
             current_line_number: Default::default(),
-            current_source_offset: Default::default(),
+            current_source: source_code,
             columnar_position: Default::default(),
             numeric_values: Default::default(),
             string_values: Default::default(),
-            array_values: Default::default(),
+            array_values: vec![0.0; array_values_len],
             stack: Default::default(),
             data_pointer: Default::default(),
             rng: XorShiftRng::seed_from_u64(0x0123456789ABCDEF),
-        }
-    }
-}
-
-impl State {
-    fn new(array_values_len: usize) -> Self {
-        Self {
-            array_values: vec![0.0; array_values_len],
-            ..Default::default()
         }
     }
 }
@@ -78,8 +68,7 @@ impl<'a> Interpreter<'a> {
     pub fn new(program: &'a Program, source_code: &'a str) -> Self {
         Self {
             program,
-            source_code,
-            state: State::new(program.array_values_len),
+            state: State::new(program.array_values_len, source_code),
         }
     }
 
@@ -98,7 +87,7 @@ impl<'a> Interpreter<'a> {
                     statement_source,
                 } => {
                     self.state.current_line_number = *line_number;
-                    self.state.current_source_offset = statement_source.offset;
+                    self.state.current_source = statement_source;
                     self.evaluate_statement(statement, stdin, stdout, stderr)?
                 }
                 Block::For { .. } => {
@@ -107,7 +96,7 @@ impl<'a> Interpreter<'a> {
             };
 
             let src_line_number = self.state.current_line_number;
-            let source_offset = self.state.current_source_offset;
+            let current_source = self.state.current_source;
 
             match action {
                 Action::NextLine => block = self.program.next_block(block),
@@ -118,7 +107,7 @@ impl<'a> Interpreter<'a> {
                         .ok_or_else(|| Error::UndefinedLineNumber {
                             src_line_number,
                             line_number,
-                            statement_source: self.get_source_line(source_offset).into(),
+                            statement_source: current_source.lines().next().unwrap().to_string(),
                         })?;
                 }
                 Action::Gosub(line_number) => {
@@ -128,7 +117,7 @@ impl<'a> Interpreter<'a> {
                         .ok_or_else(|| Error::UndefinedLineNumber {
                             src_line_number,
                             line_number,
-                            statement_source: self.get_source_line(source_offset).into(),
+                            statement_source: current_source.lines().next().unwrap().to_string(),
                         })?;
                     self.state.stack.push(self.state.current_line_number);
                 }
@@ -144,7 +133,7 @@ impl<'a> Interpreter<'a> {
                         .ok_or_else(|| Error::UndefinedLineNumber {
                             src_line_number,
                             line_number: prev_line_number,
-                            statement_source: self.get_source_line(source_offset).into(),
+                            statement_source: current_source.lines().next().unwrap().to_string(),
                         })?;
                     block = self.program.next_block(prev_block);
                 }
@@ -185,10 +174,12 @@ impl<'a> Interpreter<'a> {
             Statement::Input(variables) => {
                 let mut buffer = String::new();
                 stdin.read_line(&mut buffer).unwrap();
-                let (_, constants) = parser::input_reply(parser::Span::new(CompleteStr(&buffer)))
-                    .map_err(|_| Error::InsufficientInput {
-                    src_line_number: self.state.current_line_number,
-                })?;
+                let (_, constants) =
+                    parser2::input_reply::<VerboseError<_>>(&buffer).map_err(|_| {
+                        Error::InsufficientInput {
+                            src_line_number: self.state.current_line_number,
+                        }
+                    })?;
                 for (variable, datum) in variables.iter().zip(constants) {
                     self.assign_variable_from_datum(variable, &datum, stderr)?;
                 }
@@ -661,7 +652,7 @@ impl<'a> Interpreter<'a> {
         }
         let c = constant.sign * constant.significand * 10f64.powi(constant.exrad);
         if c.is_infinite() {
-            let line = self.get_source_line(self.state.current_source_offset);
+            let line = self.state.current_source.lines().next().unwrap();
             let significand = format!("{}", constant.significand as usize);
             let cursor = line.find(&significand);
             if let Some(cursor) = cursor {
@@ -703,9 +694,9 @@ impl<'a> Interpreter<'a> {
             (Variable::Numeric(v), Datum::Unquoted(s)) => {
                 // FIXME: After reading unquoted string, we should try to parse it as
                 // numeric variable again, and store its value in datum.
-                let res = parser::numeric_constant(parser::Span::new(CompleteStr(&s.0)));
+                let res = parser2::numeric_constant::<VerboseError<_>>(&s.0);
                 match res {
-                    Ok((remaining, ref c)) if remaining.fragment.is_empty() => {
+                    Ok((remaining, ref c)) if remaining.is_empty() => {
                         let value = self.evaluate_numeric_constant(c, stderr)?;
                         match v {
                             NumericVariable::Array(ar) => {
@@ -852,10 +843,6 @@ impl<'a> Interpreter<'a> {
         dim.offset + ar.subscript.0 + dim.dim1 * ar.subscript.1.unwrap_or(0)
     }
 
-    fn get_source_line(&self, offset: usize) -> &str {
-        self.source_code[offset..].lines().next().unwrap()
-    }
-
     fn warn<W: Write, S: AsRef<str>>(&self, stderr: &mut W, message: S) -> io::Result<()> {
         writeln!(
             stderr,
@@ -875,7 +862,13 @@ impl<'a> Interpreter<'a> {
         message: S,
         cursor: usize,
     ) -> io::Result<()> {
-        let statement_source = self.get_source_line(self.state.current_source_offset as usize);
+        let statement_source = self
+            .state
+            .current_source
+            .lines()
+            .next()
+            .unwrap()
+            .to_string();
         writeln!(
             stderr,
             "{}: warning: {}\n {}\n {:cursor$}^",

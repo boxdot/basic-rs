@@ -5,8 +5,6 @@ authors = ["boxdot <d@zerovolt.org>", "jeschkies <k@jeschkies.xyz>"]
 edition = "2018"
 
 [dependencies]
-nom = "4.2.3"
-nom_locate = "0.3.1"
 itertools = "0.8.0"
 rand = "0.7"
 rand_xorshift = "0.2"

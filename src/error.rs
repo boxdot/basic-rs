@@ -1,9 +1,7 @@
-use nom;
-use nom::simple_errors::Context;
-use nom::types::CompleteStr;
-
 use crate::ast::NextLine;
-use crate::parser::{self, Span};
+use crate::parser2;
+
+use nom5::error::VerboseError;
 
 use std::convert;
 use std::fmt;
@@ -94,15 +92,16 @@ pub enum Error {
     IoError(io::Error),
 }
 
-impl<'a> convert::From<nom::Err<Span<'a>>> for Error {
-    fn from(e: nom::Err<Span<'a>>) -> Self {
+impl<'a> convert::From<nom5::Err<VerboseError<&'a str>>> for Error {
+    fn from(e: nom5::Err<VerboseError<&'a str>>) -> Self {
         match e {
-            nom::Err::Incomplete(needed) => {
+            nom5::Err::Incomplete(needed) => {
                 Error::Parser(format!("incomplete input: {:?}", needed))
             }
-            nom::Err::Error(Context::Code(span, _)) => Error::Parser(format!("{}", span.fragment)),
-            nom::Err::Failure(Context::Code(span, _)) => {
-                Error::Parser(format!("{}", span.fragment))
+            nom5::Err::Error(VerboseError { errors })
+            | nom5::Err::Failure(VerboseError { errors }) => {
+                dbg!(&errors);
+                Error::Parser(format!("{}", errors.first().expect("at least one error").0))
             }
         }
     }
@@ -297,28 +296,31 @@ impl fmt::Display for Error {
     }
 }
 
-pub fn format_remaining(remaining: &'_ str) -> Result<String, Error> {
+pub fn format_remaining(remaining: &str) -> Result<String, Error> {
     let failed_line = remaining.lines().next().unwrap();
-    let failed_span = Span::new(CompleteStr(failed_line));
 
     // special case: unexpected NEXT statement => no corresponding FOR block
-    if let Ok((_, NextLine { line_number, .. })) = parser::next_line(failed_span) {
+    if let Ok((_, NextLine { line_number, .. })) =
+        parser2::next_line::<VerboseError<_>>(failed_line)
+    {
         return Ok(format!("{}: error: NEXT without FOR \n", line_number));
     }
 
     // general case
     // extract fragment where the parser failed from all possible errors
-    let failed_fragment = match parser::line(failed_span) {
-        Ok((span, _)) => span.fragment,
-        Err(nom::Err::Error(Context::Code(span, _))) => span.fragment,
-        Err(nom::Err::Failure(Context::Code(span, _))) => span.fragment,
+    let failed_fragment = match parser2::line(failed_line) {
+        Ok((remaining, _)) => remaining,
+        Err(nom5::Err::Error(VerboseError { errors }))
+        | Err(nom5::Err::Failure(VerboseError { errors })) => {
+            errors.first().expect("at least one error").0
+        }
         Err(e) => return Err(Error::from(e)),
     };
 
     let mut parts = failed_line.splitn(2, ' ');
     let line_number = parts.next().unwrap();
     let statement = parts.next().unwrap();
-    let failed_pos = statement.find(failed_fragment.as_ref()).unwrap_or(0);
+    let failed_pos = statement.find(failed_fragment).unwrap_or(0);
     Ok(format!(
         "{}: error: syntax error \n {}\n {:cursor$}^\n",
         line_number,

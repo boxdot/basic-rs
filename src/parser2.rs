@@ -1,9 +1,6 @@
 use crate::ast;
 use crate::error;
 
-use nom::types::CompleteStr;
-use nom_locate::LocatedSpan;
-
 use nom5::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1, take_while_m_n},
@@ -13,14 +10,6 @@ use nom5::{
     multi::{many0, separated_nonempty_list},
     sequence::{pair, preceded, terminated, tuple},
     IResult,
-};
-
-// We use this constant to populate our ast which requires a span to be included.
-// Later we should remove it in favor of proper nom 5 error handling.
-const DUMMY_SPAN: LocatedSpan<CompleteStr<'static>> = LocatedSpan {
-    offset: 0,
-    line: 1,
-    fragment: CompleteStr(""),
 };
 
 fn full_stop<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, char, E> {
@@ -92,7 +81,7 @@ fn is_plain_string_character(c: char) -> bool {
 }
 
 fn remark_string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
-    take_while1(is_string_character)(i)
+    take_while(is_string_character)(i)
 }
 
 fn quoted_string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
@@ -120,8 +109,7 @@ fn unquoted_string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &
 pub fn program<'a, E: ParseError<&'a str>>(
     i: &'a str,
 ) -> IResult<&'a str, Result<ast::Program<'a>, error::Error>, E> {
-    map(pair(many0(block), end_line), |(mut blocks, end_line)| {
-        blocks.push(end_line);
+    map(terminated(many0(block), end_of_line), |blocks| {
         ast::Program::new(blocks, i)
     })(i)
 }
@@ -132,7 +120,7 @@ fn block<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Block<
     alt((line, for_block))(i)
 }
 
-fn line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Block<'a>, E> {
+pub fn line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Block<'a>, E> {
     map(
         tuple((
             terminated(line_number, space1),
@@ -142,7 +130,7 @@ fn line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Block<'
         |(line_number, statement, _)| ast::Block::Line {
             line_number,
             statement,
-            statement_source: DUMMY_SPAN,
+            statement_source: i,
         },
     )(i)
 }
@@ -171,7 +159,7 @@ fn end_line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Blo
         |(line_number, statement, _)| ast::Block::Line {
             line_number,
             statement,
-            statement_source: DUMMY_SPAN,
+            statement_source: i,
         },
     )(i)
 }
@@ -199,12 +187,13 @@ fn statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::St
         dimension_statement,
         option_statement,
         randomize_statement,
+        end_statement,
     ))(i)
 }
 
 // 6. Constants
 
-fn numeric_constant<'a, E: ParseError<&'a str>>(
+pub fn numeric_constant<'a, E: ParseError<&'a str>>(
     i: &'a str,
 ) -> IResult<&'a str, ast::NumericConstant, E> {
     map(pair(opt(sign), numeric_rep), |(sign, numeric_rep)| {
@@ -516,7 +505,7 @@ fn string_let_statement<'a, E: ParseError<&'a str>>(
 // 12. Control statements
 
 fn goto_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
-    let go = terminated(tag("GO"), space1);
+    let go = terminated(tag("GO"), space0);
     let to = terminated(tag("TO"), space1);
     map(
         preceded(go, preceded(to, line_number)),
@@ -588,8 +577,8 @@ fn equality_relation<'a, E: ParseError<&'a str>>(
 }
 
 fn gosub_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
-    let go = terminated(tag("GO"), space1);
-    let to = terminated(tag("TO"), space1);
+    let go = terminated(tag("GO"), space0);
+    let to = terminated(tag("SUB"), space1);
     map(
         preceded(go, preceded(to, line_number)),
         ast::Statement::Gosub,
@@ -660,12 +649,12 @@ fn for_line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::For
         |(line_number, for_statement, _)| ast::ForLine {
             line_number,
             for_statement,
-            statement_source: DUMMY_SPAN,
+            statement_source: i,
         },
     )(i)
 }
 
-fn next_line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::NextLine, E> {
+pub fn next_line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::NextLine, E> {
     map(
         tuple((
             terminated(line_number, space1),
@@ -675,7 +664,7 @@ fn next_line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Ne
         |(line_number, next_statement, _)| ast::NextLine {
             line_number,
             next_statement,
-            statement_source: DUMMY_SPAN,
+            statement_source: i,
         },
     )(i)
 }
