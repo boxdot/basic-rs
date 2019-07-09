@@ -528,8 +528,8 @@ fn if_then_statement<'a, E: ParseError<&'a str>>(
 fn relational_expression<'a, E: ParseError<&'a str>>(
     i: &'a str,
 ) -> IResult<&'a str, ast::RelationalExpression, E> {
-    let relation = preceded(space1, terminated(relation, space1));
-    let equality_relation = preceded(space1, terminated(equality_relation, space1));
+    let relation = preceded(space0, terminated(relation, space0));
+    let equality_relation = preceded(space0, terminated(equality_relation, space0));
     alt((
         map(
             tuple((numeric_expression, relation, numeric_expression)),
@@ -557,12 +557,12 @@ fn relational_expression<'a, E: ParseError<&'a str>>(
 fn relation<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Relation, E> {
     alt((
         map(tag("=="), |_| ast::Relation::EqualTo),
-        map(tag("="), |_| ast::Relation::EqualTo),
+        map(char('='), |_| ast::Relation::EqualTo),
         map(tag("<>"), |_| ast::Relation::NotEqualTo),
         map(tag("<="), |_| ast::Relation::LessThanOrEqualTo),
         map(tag(">="), |_| ast::Relation::GreaterThanOrEqualTo),
-        map(tag("<"), |_| ast::Relation::LessThan),
-        map(tag(">"), |_| ast::Relation::GreaterThan),
+        map(char('<'), |_| ast::Relation::LessThan),
+        map(char('>'), |_| ast::Relation::GreaterThan),
     ))(i)
 }
 
@@ -571,7 +571,7 @@ fn equality_relation<'a, E: ParseError<&'a str>>(
 ) -> IResult<&'a str, ast::EqualityRelation, E> {
     alt((
         map(tag("=="), |_| ast::EqualityRelation::EqualTo),
-        map(tag("="), |_| ast::EqualityRelation::EqualTo),
+        map(char('='), |_| ast::EqualityRelation::EqualTo),
         map(tag("<>"), |_| ast::EqualityRelation::NotEqualTo),
     ))(i)
 }
