@@ -127,10 +127,10 @@ pub fn line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Blo
             terminated(statement, space0),
             end_of_line,
         )),
-        |(line_number, statement, _)| ast::Block::Line {
+        |(line_number, (statement, statement_source), _)| ast::Block::Line {
             line_number,
             statement,
-            statement_source: i,
+            statement_source,
         },
     )(i)
 }
@@ -168,7 +168,8 @@ fn end_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast
     map(tag("END"), |_| ast::Statement::End)(i)
 }
 
-fn statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
+fn statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, (ast::Statement, &'a str), E> {
+    map(
     alt((
         goto_statement,
         gosub_statement,
@@ -188,7 +189,10 @@ fn statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::St
         option_statement,
         randomize_statement,
         end_statement,
-    ))(i)
+    )),
+        |stmt| (stmt, i)
+    )(i)
+
 }
 
 // 6. Constants
