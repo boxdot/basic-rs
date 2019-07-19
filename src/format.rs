@@ -69,7 +69,8 @@ pub fn format_float(value: f64) -> String {
                         .chars()
                         .skip(integ.len().saturating_sub(n_shift))
                         .chain(fract.chars()),
-                ).collect();
+                )
+                .collect();
             let integ = &integ[..integ.len().saturating_sub(n_shift)];
             let full_stop = if !fract.is_empty() { "." } else { "" };
             format!("{}{}{}{} ", sign_str, integ, full_stop, fract)

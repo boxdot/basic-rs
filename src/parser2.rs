@@ -8,7 +8,7 @@ use nom5::{
     combinator::{map, map_res, opt},
     error::ParseError,
     multi::{many0, separated_nonempty_list},
-    sequence::{pair, preceded, terminated, tuple},
+    sequence::{delimited, pair, preceded, terminated, tuple},
     IResult,
 };
 
@@ -597,12 +597,11 @@ fn on_goto_statement<'a, E: ParseError<&'a str>>(
     i: &'a str,
 ) -> IResult<&'a str, ast::Statement, E> {
     let on = terminated(tag("ON"), space1);
-    let go = terminated(tag("GO"), space1);
+    let go = terminated(tag("GO"), space0);
     let to = terminated(tag("TO"), space1);
 
     let numeric_expression = terminated(numeric_expression, space1);
-    let line_numbers =
-        separated_nonempty_list(preceded(space0, terminated(char(','), space0)), line_number);
+    let line_numbers = separated_nonempty_list(delimited(space0, char(','), space0), line_number);
 
     map(
         pair(
