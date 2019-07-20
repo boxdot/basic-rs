@@ -88,7 +88,7 @@ fn quoted_string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a
 }
 
 fn unquoted_string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
-    take_while1(is_plain_string_character)(i)
+    map(take_while1(is_unquoted_string_character), str::trim)(i)
 }
 
 // 5. Programs
