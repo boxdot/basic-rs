@@ -69,10 +69,6 @@ fn is_unquoted_string_character(c: char) -> bool {
     is_space(c) || is_plain_string_character(c)
 }
 
-fn plain_string_character<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, char, E> {
-    alt((one_of("+-."), digit, letter))(i)
-}
-
 fn is_plain_string_character(c: char) -> bool {
     match c {
         '+' | '-' | '.' => true,
@@ -92,16 +88,7 @@ fn quoted_string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a
 }
 
 fn unquoted_string<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
-    alt((
-        preceded(
-            plain_string_character,
-            terminated(
-                take_while(is_unquoted_string_character),
-                plain_string_character,
-            ),
-        ),
-        take_while_m_n(1, 1, is_plain_string_character),
-    ))(i)
+    take_while1(is_plain_string_character)(i)
 }
 
 // 5. Programs
@@ -149,50 +136,36 @@ fn end_of_line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, (), E
     }
 }
 
-fn end_line<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Block, E> {
-    map(
-        tuple((
-            terminated(line_number, space1),
-            terminated(end_statement, space0),
-            end_of_line,
-        )),
-        |(line_number, statement, _)| ast::Block::Line {
-            line_number,
-            statement,
-            statement_source: i,
-        },
-    )(i)
-}
-
 fn end_statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, ast::Statement, E> {
     map(tag("END"), |_| ast::Statement::End)(i)
 }
 
-fn statement<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, (ast::Statement, &'a str), E> {
+fn statement<'a, E: ParseError<&'a str>>(
+    i: &'a str,
+) -> IResult<&'a str, (ast::Statement, &'a str), E> {
     map(
-    alt((
-        goto_statement,
-        gosub_statement,
-        on_goto_statement,
-        if_then_statement,
-        def_statement,
-        let_statement,
-        print_statement,
-        return_statement,
-        stop_statement,
-        input_statement,
-        read_statement,
-        restore_statement,
-        data_statement,
-        remark_statement,
-        dimension_statement,
-        option_statement,
-        randomize_statement,
-        end_statement,
-    )),
-        |stmt| (stmt, i)
+        alt((
+            goto_statement,
+            gosub_statement,
+            on_goto_statement,
+            if_then_statement,
+            def_statement,
+            let_statement,
+            print_statement,
+            return_statement,
+            stop_statement,
+            input_statement,
+            read_statement,
+            restore_statement,
+            data_statement,
+            remark_statement,
+            dimension_statement,
+            option_statement,
+            randomize_statement,
+            end_statement,
+        )),
+        |stmt| (stmt, i),
     )(i)
-
 }
 
 // 6. Constants
