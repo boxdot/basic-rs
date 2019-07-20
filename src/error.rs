@@ -100,8 +100,11 @@ impl<'a> convert::From<nom5::Err<VerboseError<&'a str>>> for Error {
             }
             nom5::Err::Error(VerboseError { errors })
             | nom5::Err::Failure(VerboseError { errors }) => {
-                dbg!(&errors);
-                Error::Parser(format!("{}", errors.first().expect("at least one error").0))
+                let msg = format_remaining(errors.first().expect("at least one error").0);
+                match msg {
+                    Ok(msg) => Error::Parser(msg),
+                    Err(e) => e,
+                }
             }
         }
     }
@@ -116,7 +119,7 @@ impl convert::From<io::Error> for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::Parser(ref s) => write!(f, "Parser error: {}", s),
+            Error::Parser(ref s) => write!(f, "{}", s),
             Error::StatementsAfterEnd { ref line_numbers } => {
                 for line_number in line_numbers {
                     writeln!(f, "{}: error: line after an END statement ", line_number)?;
