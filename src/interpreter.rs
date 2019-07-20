@@ -4,7 +4,6 @@ use crate::format::format_float;
 use crate::parser2;
 
 use itertools::Itertools;
-use nom5::error::VerboseError;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 
@@ -175,10 +174,8 @@ impl<'a> Interpreter<'a> {
                 let mut buffer = String::new();
                 stdin.read_line(&mut buffer).unwrap();
                 let (_, constants) =
-                    parser2::input_reply::<VerboseError<_>>(&buffer).map_err(|_| {
-                        Error::InsufficientInput {
-                            src_line_number: self.state.current_line_number,
-                        }
+                    parser2::input_reply(&buffer).map_err(|_| Error::InsufficientInput {
+                        src_line_number: self.state.current_line_number,
                     })?;
                 for (variable, datum) in variables.iter().zip(constants) {
                     self.assign_variable_from_datum(variable, &datum, stderr)?;
@@ -694,7 +691,7 @@ impl<'a> Interpreter<'a> {
             (Variable::Numeric(v), Datum::Unquoted(s)) => {
                 // FIXME: After reading unquoted string, we should try to parse it as
                 // numeric variable again, and store its value in datum.
-                let res = parser2::numeric_constant::<VerboseError<_>>(&s.0);
+                let res = parser2::numeric_constant(&s.0);
                 match res {
                     Ok((remaining, ref c)) if remaining.is_empty() => {
                         let value = self.evaluate_numeric_constant(c, stderr)?;

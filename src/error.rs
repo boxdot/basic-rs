@@ -1,7 +1,7 @@
 use crate::ast::NextLine;
 use crate::parser2;
 
-use nom5::error::VerboseError;
+use nom5::error::{ErrorKind, ParseError};
 
 use std::convert;
 use std::fmt;
@@ -9,7 +9,10 @@ use std::io;
 
 #[derive(Debug)]
 pub enum Error {
-    Parser(String),
+    Parser {
+        input: String,
+        kind: ErrorKind,
+    },
     StatementsAfterEnd {
         line_numbers: Vec<u16>,
     },
@@ -90,23 +93,20 @@ pub enum Error {
         statement_source: String,
     },
     IoError(io::Error),
+    Remaining(String),
 }
 
-impl<'a> convert::From<nom5::Err<VerboseError<&'a str>>> for Error {
-    fn from(e: nom5::Err<VerboseError<&'a str>>) -> Self {
-        match e {
-            nom5::Err::Incomplete(needed) => {
-                Error::Parser(format!("incomplete input: {:?}", needed))
-            }
-            nom5::Err::Error(VerboseError { errors })
-            | nom5::Err::Failure(VerboseError { errors }) => {
-                let msg = format_remaining(errors.first().expect("at least one error").0);
-                match msg {
-                    Ok(msg) => Error::Parser(msg),
-                    Err(e) => e,
-                }
-            }
+impl<'a> ParseError<&'a str> for Error {
+    fn from_error_kind(input: &'a str, kind: ErrorKind) -> Self {
+        Error::Parser {
+            input: input.to_string(),
+            kind,
         }
+    }
+
+    fn append(_input: &'a str, _kind: ErrorKind, other: Self) -> Self {
+        // for now we are only interested in the first error
+        other
     }
 }
 
@@ -119,7 +119,7 @@ impl convert::From<io::Error> for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::Parser(ref s) => write!(f, "{}", s),
+            Error::Parser { ref input, .. } => write!(f, "{}", format_remaining(&input)),
             Error::StatementsAfterEnd { ref line_numbers } => {
                 for line_number in line_numbers {
                     writeln!(f, "{}: error: line after an END statement ", line_number)?;
@@ -295,40 +295,39 @@ impl fmt::Display for Error {
                 )
             }
             Error::IoError(ref e) => write!(f, "{}", e),
+            Error::Remaining(ref input) => write!(f, "Parser error; remaining lines: {}", input),
         }
     }
 }
 
-pub fn format_remaining(remaining: &str) -> Result<String, Error> {
+pub fn format_remaining(remaining: &str) -> String {
     let failed_line = remaining.lines().next().unwrap();
 
     // special case: unexpected NEXT statement => no corresponding FOR block
-    if let Ok((_, NextLine { line_number, .. })) =
-        parser2::next_line::<VerboseError<_>>(failed_line)
-    {
-        return Ok(format!("{}: error: NEXT without FOR \n", line_number));
+    if let Ok((_, NextLine { line_number, .. })) = parser2::next_line(failed_line) {
+        return format!("{}: error: NEXT without FOR \n", line_number);
     }
 
     // general case
     // extract fragment where the parser failed from all possible errors
-    let failed_fragment = match parser2::line(failed_line) {
+    let res = parser2::line(failed_line);
+    let failed_fragment = match res {
         Ok((remaining, _)) => remaining,
-        Err(nom5::Err::Error(VerboseError { errors }))
-        | Err(nom5::Err::Failure(VerboseError { errors })) => {
-            errors.first().expect("at least one error").0
-        }
-        Err(e) => return Err(Error::from(e)),
+        Err(nom5::Err::Error(Error::Parser { ref input, .. }))
+        | Err(nom5::Err::Failure(Error::Parser { ref input, .. })) => input,
+        Err(nom5::Err::Incomplete(_)) => unreachable!(),
+        Err(nom5::Err::Error(e)) | Err(nom5::Err::Failure(e)) => panic!("unexpected error: {}", e),
     };
 
     let mut parts = failed_line.splitn(2, ' ');
     let line_number = parts.next().unwrap();
     let statement = parts.next().unwrap();
     let failed_pos = statement.find(failed_fragment).unwrap_or(0);
-    Ok(format!(
+    format!(
         "{}: error: syntax error \n {}\n {:cursor$}^\n",
         line_number,
         statement,
         "",
         cursor = failed_pos + 1
-    ))
+    )
 }
