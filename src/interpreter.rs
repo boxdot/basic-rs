@@ -1,7 +1,7 @@
 use crate::ast::*;
 use crate::error::Error;
 use crate::format::format_float;
-use crate::parser2;
+use crate::parser;
 
 use itertools::Itertools;
 use rand::{Rng, SeedableRng};
@@ -39,6 +39,7 @@ struct State<'a> {
 }
 
 impl<'a> State<'a> {
+    #[allow(clippy::unreadable_literal)]
     fn new(array_values_len: usize, source_code: &'a str) -> Self {
         Self {
             current_line_number: Default::default(),
@@ -174,7 +175,7 @@ impl<'a> Interpreter<'a> {
                 let mut buffer = String::new();
                 stdin.read_line(&mut buffer).unwrap();
                 let (_, constants) =
-                    parser2::input_reply(&buffer).map_err(|_| Error::InsufficientInput {
+                    parser::input_reply(&buffer).map_err(|_| Error::InsufficientInput {
                         src_line_number: self.state.current_line_number,
                     })?;
                 for (variable, datum) in variables.iter().zip(constants) {
@@ -691,7 +692,7 @@ impl<'a> Interpreter<'a> {
             (Variable::Numeric(v), Datum::Unquoted(s)) => {
                 // FIXME: After reading unquoted string, we should try to parse it as
                 // numeric variable again, and store its value in datum.
-                let res = parser2::numeric_constant(&s.0);
+                let res = parser::numeric_constant(&s.0);
                 match res {
                     Ok((remaining, ref c)) if remaining.is_empty() => {
                         let value = self.evaluate_numeric_constant(c, stderr)?;

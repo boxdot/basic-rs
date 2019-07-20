@@ -1,7 +1,7 @@
 use crate::ast::NextLine;
-use crate::parser2;
+use crate::parser;
 
-use nom5::error::{ErrorKind, ParseError};
+use nom::error::{ErrorKind, ParseError};
 
 use std::convert;
 use std::fmt;
@@ -304,19 +304,19 @@ pub fn format_remaining(remaining: &str) -> String {
     let failed_line = remaining.lines().next().unwrap();
 
     // special case: unexpected NEXT statement => no corresponding FOR block
-    if let Ok((_, NextLine { line_number, .. })) = parser2::next_line(failed_line) {
+    if let Ok((_, NextLine { line_number, .. })) = parser::next_line(failed_line) {
         return format!("{}: error: NEXT without FOR \n", line_number);
     }
 
     // general case
     // extract fragment where the parser failed from all possible errors
-    let res = parser2::line(failed_line);
+    let res = parser::line(failed_line);
     let failed_fragment = match res {
         Ok((remaining, _)) => remaining,
-        Err(nom5::Err::Error(Error::Parser { ref input, .. }))
-        | Err(nom5::Err::Failure(Error::Parser { ref input, .. })) => input,
-        Err(nom5::Err::Incomplete(_)) => unreachable!(),
-        Err(nom5::Err::Error(e)) | Err(nom5::Err::Failure(e)) => panic!("unexpected error: {}", e),
+        Err(nom::Err::Error(Error::Parser { ref input, .. }))
+        | Err(nom::Err::Failure(Error::Parser { ref input, .. })) => input,
+        Err(nom::Err::Incomplete(_)) => unreachable!(),
+        Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => panic!("unexpected error: {}", e),
     };
 
     let mut parts = failed_line.splitn(2, ' ');
