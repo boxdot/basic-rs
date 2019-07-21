@@ -36,6 +36,7 @@ fn letter<'a>(i: &'a str) -> IResult<&'a str, char, Error> {
 fn is_letter(c: char) -> bool {
     match c {
         'A'..='Z' => true,
+        'a'..='z' => true,
         _ => false,
     }
 }
