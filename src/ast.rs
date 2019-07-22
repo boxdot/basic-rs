@@ -1,7 +1,4 @@
 use crate::error::Error;
-use crate::parser::Span;
-
-use nom::types::CompleteStr;
 
 use std::collections::HashMap;
 use std::fmt::{self, Write};
@@ -123,7 +120,7 @@ impl<'a> Program<'a> {
                                     return Err(Error::InvalidDimSubscript {
                                         src_line_number: line_number,
                                         subscript: dim.dim1 - 1,
-                                        statement_source: source_code[statement_source.offset..]
+                                        statement_source: statement_source
                                             .lines()
                                             .next()
                                             .unwrap()
@@ -137,7 +134,7 @@ impl<'a> Program<'a> {
                                     return Err(Error::InvalidDimSubscript {
                                         src_line_number: line_number,
                                         subscript: dim.dim2.unwrap() - 1,
-                                        statement_source: source_code[statement_source.offset..]
+                                        statement_source: statement_source
                                             .lines()
                                             .next()
                                             .unwrap()
@@ -287,7 +284,7 @@ impl<'a> Program<'a> {
                     };
                     self.blocks.push(Block::Line {
                         line_number: for_line.line_number,
-                        statement_source: Span::new(CompleteStr("")),
+                        statement_source: "",
                         statement: Statement::Let(LetStatement::Numeric {
                             variable: NumericVariable::Limit(limit),
                             expression: for_line.for_statement.limit,
@@ -302,7 +299,7 @@ impl<'a> Program<'a> {
                     };
                     self.blocks.push(Block::Line {
                         line_number: state.next_internal_line_number(),
-                        statement_source: Span::new(CompleteStr("")),
+                        statement_source: "",
                         statement: Statement::Let(LetStatement::Numeric {
                             variable: NumericVariable::Increment(increment),
                             expression: for_line
@@ -411,7 +408,7 @@ impl<'a> Program<'a> {
                     // REM "continue after FOR block"
                     self.blocks.push(Block::Line {
                         line_number: break_line_number,
-                        statement_source: Span::new(CompleteStr("")),
+                        statement_source: "",
                         statement: Statement::Rem,
                     });
                     self.index_last_block()?;
@@ -430,19 +427,15 @@ impl<'a> Program<'a> {
     fn validate(
         &self,
         builder_state: &ProgramBuilderState,
-        source_code: &str,
+        _source_code: &str,
     ) -> Result<(), Error> {
         // check for defined line number
-        let check_line_number = |ref_line_number, line_number, statement_source: &Span| {
+        let check_line_number = |ref_line_number, line_number, statement_source: &str| {
             if self.block_index.get(&ref_line_number).is_none() {
                 Err(Error::UndefinedLineNumber {
                     src_line_number: line_number,
                     line_number: ref_line_number,
-                    statement_source: source_code[statement_source.offset..]
-                        .lines()
-                        .next()
-                        .unwrap()
-                        .into(),
+                    statement_source: statement_source.lines().next().unwrap().into(),
                 })
             } else {
                 Ok(())
@@ -488,11 +481,7 @@ impl<'a> Program<'a> {
                         let mut fns = Vec::new();
                         expression.function_calls(&mut fns);
                         if fns.iter().any(|f| f == name) {
-                            let statement_source = source_code[statement_source.offset..]
-                                .lines()
-                                .next()
-                                .unwrap()
-                                .into();
+                            let statement_source = statement_source.lines().next().unwrap().into();
                             return Err(Error::UndefinedFunction {
                                 src_line_number: *line_number,
                                 name: *name,
@@ -550,7 +539,7 @@ impl ProgramBuilderState {
 pub enum Block<'a> {
     Line {
         line_number: u16,
-        statement_source: Span<'a>,
+        statement_source: &'a str,
         statement: Statement,
     },
     For {
@@ -572,14 +561,14 @@ impl<'a> Block<'a> {
 #[derive(Debug, PartialEq)]
 pub struct ForLine<'a> {
     pub line_number: u16,
-    pub statement_source: Span<'a>,
+    pub statement_source: &'a str,
     pub for_statement: ForStatement,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct NextLine<'a> {
     pub line_number: u16,
-    pub statement_source: Span<'a>,
+    pub statement_source: &'a str,
     pub next_statement: NextStatement,
 }
 
@@ -608,6 +597,7 @@ pub enum Statement {
     End,
     Dim(Vec<ArrayDeclaration>),
     OptionBase(OptionBase),
+    Randomize,
 }
 
 #[derive(Debug, PartialEq)]
