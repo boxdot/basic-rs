@@ -1,84 +1,49 @@
-use crate::ast::*;
+use crate::ast;
 use crate::error::Error;
 
-use nom::types::CompleteStr;
-use nom::{eol, space, space0, ErrorKind, IResult};
-use nom_locate::LocatedSpan;
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_while, take_while1, take_while_m_n},
+    character::complete::{char, one_of, space0, space1},
+    combinator::{map, map_res, opt},
+    multi::{many0, separated_nonempty_list},
+    sequence::{delimited, pair, preceded, terminated, tuple},
+    IResult,
+};
 
-use std::fmt;
-use std::num;
-
-/// Captures the offset, line number and remaining text for the current position of the parser.
-pub type Span<'a> = LocatedSpan<CompleteStr<'a>>;
-
-/// Parser error codes.
-///
-/// We use a nom's simple error flavour, which only allows to return error codes
-/// when parser fails.
-pub enum ErrorCode {
-    ExpectedStringExpression,
-    ForWithoutNext,
-    Unknown,
+fn full_stop<'a>(i: &'a str) -> IResult<&'a str, char, Error> {
+    char('.')(i)
 }
 
-impl From<u32> for ErrorCode {
-    fn from(code: u32) -> Self {
-        match code {
-            0 => ErrorCode::ExpectedStringExpression,
-            1 => ErrorCode::ForWithoutNext,
-            _ => ErrorCode::Unknown,
-        }
+fn is_space(c: char) -> bool {
+    c == ' '
+}
+
+fn quotation_mark<'a>(i: &'a str) -> IResult<&'a str, char, Error> {
+    char('"')(i)
+}
+
+// 4. Characters and Strings
+//
+// Each rule taking a single character is implemented as a matching rule and as boolean check.
+// The latter is needed for functions consuming character as long a predicate is satisfied, like
+// `take_while`, `take_while1`, errortc...
+
+fn letter<'a>(i: &'a str) -> IResult<&'a str, char, Error> {
+    one_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ")(i)
+}
+
+fn is_letter(c: char) -> bool {
+    match c {
+        'A'..='Z' => true,
+        'a'..='z' => true,
+        _ => false,
     }
 }
 
-impl fmt::Display for ErrorCode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ErrorCode::ExpectedStringExpression => f.write_str("string expression expected"),
-            ErrorCode::ForWithoutNext => f.write_str("FOR without NEXT"),
-            ErrorCode::Unknown => f.write_str("unknown"),
-        }
-    }
+fn digit<'a>(i: &'a str) -> IResult<&'a str, char, Error> {
+    one_of("0123456789")(i)
 }
-
-impl ErrorCode {
-    /// Converts error code to BASIC conform error output.
-    pub fn to_string(&self, span: &Span, input: &str) -> String {
-        match self {
-            ErrorCode::ExpectedStringExpression => {
-                let line = input.lines().nth(span.line as usize - 1).unwrap();
-                let mut parts = line.trim().splitn(2, ' ');
-                let line_number = parts.next().unwrap();
-                let statement = parts.next().unwrap();
-                let remaining = span.fragment.lines().next().unwrap();
-                let pos = statement.find(remaining).unwrap();
-                format!(
-                    "{}: error: {} \n {}\n{:width$}^\n",
-                    line_number,
-                    self,
-                    statement,
-                    "",
-                    width = pos + 1
-                )
-            }
-            ErrorCode::ForWithoutNext => {
-                // span does not give a good context here, we need to find the first
-                // FOR block by going through lines backwards
-                let lines: Vec<_> = input.lines().collect();
-                let for_line_str = lines[0..span.line as usize - 1]
-                    .iter()
-                    .rev()
-                    .find(|l| l.find("FOR").is_some())
-                    .unwrap();
-                let (_, for_line) = for_line(Span::new(CompleteStr(for_line_str))).unwrap();
-                format!("{}: error: {} \n", for_line.line_number, self)
-            }
-            ErrorCode::Unknown => panic!("bug in parser"),
-        }
-    }
-}
-
-// 4. Syntax
 
 fn is_digit(c: char) -> bool {
     match c {
@@ -87,659 +52,734 @@ fn is_digit(c: char) -> bool {
     }
 }
 
-named!(letter<Span, char>,
-    one_of!("ABCDEFGHIJKLMNOPQRSTUVWXYZ"));
+fn is_string_character(c: char) -> bool {
+    c == '"' || is_quoted_string_character(c)
+}
 
-named!(digit<Span, u8>,
-    map!(one_of!("0123456789"), |c| c as u8 - b'0'));
+fn is_quoted_string_character(c: char) -> bool {
+    match c {
+        // quoted_string_character
+        '!' | '#' | '$' | '%' | '&' | '\'' | '(' | ')' | '*' | ',' | '/' | ':' | ';' | '<'
+        | '=' | '>' | '?' | '^' | '_' => true,
+        other => is_unquoted_string_character(other),
+    }
+}
 
-named!(unquoted_string_character<Span, char>,
-    alt!(char!(' ') | plain_string_character));
+fn is_unquoted_string_character(c: char) -> bool {
+    is_space(c) || is_plain_string_character(c)
+}
 
-named!(plain_string_character<Span, char>,
-    alt!(
-        char!('+') |
-        char!('-') |
-        char!('.') |
-        one_of!("0123456789") |
-        letter
-    ));
+fn is_plain_string_character(c: char) -> bool {
+    match c {
+        '+' | '-' | '.' => true,
+        other => is_digit(other) || is_letter(other),
+    }
+}
 
-named!(unquoted_string<Span, String>,
-    map!(many1!(unquoted_string_character), {
-        |chars: Vec<char>| {
-            let s = chars.into_iter().collect::<String>();
-            String::from(s.trim())
-        }
-    }));
+fn remark_string<'a>(i: &'a str) -> IResult<&'a str, &'a str, Error> {
+    take_while(is_string_character)(i)
+}
+
+fn quoted_string<'a>(i: &'a str) -> IResult<&'a str, &'a str, Error> {
+    preceded(
+        quotation_mark,
+        terminated(take_while(is_quoted_string_character), quotation_mark),
+    )(i)
+}
+
+fn unquoted_string<'a>(i: &'a str) -> IResult<&'a str, &'a str, Error> {
+    map(take_while1(is_unquoted_string_character), str::trim)(i)
+}
 
 // 5. Programs
 
-pub fn program<'a>(input: Span<'a>) -> IResult<Span<'a>, Result<Program<'a>, Error>> {
-    do_parse!(
-        input,
-        blocks: many0!(block)
-            >> opt!(end_of_line)
-            >> (Program::new(blocks, input.fragment.as_ref()))
-    )
+pub fn program(i: &str) -> Result<ast::Program, Error> {
+    let res = map(terminated(many0(block), end_of_line), |blocks| {
+        ast::Program::new(blocks, i)
+    })(i);
+
+    match res {
+        Ok((remaining, ast)) => {
+            if remaining.is_empty() {
+                ast
+            } else {
+                Err(Error::Remaining(remaining.into()))
+            }
+        }
+        Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => Err(e),
+        Err(nom::Err::Incomplete(_)) => unreachable!(),
+    }
 }
 
-named!(block<Span, Block>,
-    alt!(line | for_block));
+// FIXME: This rule is different from the rule in the spec in the sense that a block consists of
+// many lines and not a single one.
+fn block<'a>(i: &'a str) -> IResult<&'a str, ast::Block<'a>, Error> {
+    alt((line, for_block))(i)
+}
 
-named!(pub line<Span, Block>,
-    do_parse!(
-        line_number: line_number >>
-        space >>
-        statement_source: position!() >>
-        statement: statement >>
-        space0 >>
-        end_of_line >>
-        (Block::Line{
+pub fn line<'a>(i: &'a str) -> IResult<&'a str, ast::Block<'a>, Error> {
+    map(
+        tuple((
+            terminated(line_number, space1),
+            terminated(statement, space0),
+            end_of_line,
+        )),
+        |(line_number, (statement, statement_source), _)| ast::Block::Line {
             line_number,
             statement,
             statement_source,
-        })
-    ));
+        },
+    )(i)
+}
 
-named!(line_number<Span, u16>,
-    map_res!(take_while_m_n!(1, 4, is_digit), from_decimal));
+fn line_number<'a>(i: &'a str) -> IResult<&'a str, u16, Error> {
+    map_res(take_while_m_n(1, 4, is_digit), |digits| {
+        u16::from_str_radix(digits, 10)
+    })(i)
+}
 
-named!(end_of_line<Span, Span>, alt!(eof!() | eol));
+fn end_of_line<'a>(i: &'a str) -> IResult<&'a str, (), Error> {
+    if i.is_empty() {
+        Ok((i, ())) // EOF
+    } else {
+        map(char('\n'), |_| ())(i)
+    }
+}
 
-named!(end_statement<Span, Statement>,
-    do_parse!(
-        tag!("END") >>
-        (Statement::End)
-    ));
+fn end_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    map(tag("END"), |_| ast::Statement::End)(i)
+}
 
-named!(statement<Span, Statement>,
-    alt!(
-        goto_statement |
-        gosub_statement |
-        on_goto_statement |
-        if_then_statement |
-        def_statement |
-        let_statement |
-        print_statement |
-        return_statement |
-        stop_statement |
-        input_statement |
-        read_statement |
-        restore_statement |
-        data_statement |
-        remark_statement |
-        end_statement |
-        dimension_statement |
-        option_base_statement
-    ));
+fn statement<'a>(i: &'a str) -> IResult<&'a str, (ast::Statement, &'a str), Error> {
+    map(
+        alt((
+            goto_statement,
+            gosub_statement,
+            on_goto_statement,
+            if_then_statement,
+            def_statement,
+            let_statement,
+            print_statement,
+            return_statement,
+            stop_statement,
+            input_statement,
+            read_statement,
+            restore_statement,
+            data_statement,
+            remark_statement,
+            dimension_statement,
+            option_statement,
+            randomize_statement,
+            end_statement,
+        )),
+        |stmt| (stmt, i),
+    )(i)
+}
 
 // 6. Constants
 
-named!(pub numeric_constant<Span, NumericConstant>,
-    do_parse!(
-        sign: opt!(sign) >>
-        space0 >>
-        numeric_rep: numeric_rep >>
-        (NumericConstant {
-            sign: sign.unwrap_or(Sign::Pos),
+pub fn numeric_constant<'a>(i: &'a str) -> IResult<&'a str, ast::NumericConstant, Error> {
+    map(pair(opt(sign), numeric_rep), |(sign, numeric_rep)| {
+        ast::NumericConstant {
+            sign: sign.unwrap_or(ast::Sign::Pos),
             significand: numeric_rep.0,
-            exrad: numeric_rep.1
-        })
-    ));
-
-named!(sign<Span, Sign>,
-    alt!(
-        char!('+') => { |_| Sign::Pos } |
-        char!('-') => { |_| Sign::Neg }
-    ));
-
-// We slightly deviate from the standard and allow an optional sign here:
-// cf. test P038.
-named!(numeric_rep<Span, (f64, i32)>,
-    do_parse!(
-        sign: opt!(sign) >>
-        space0 >>
-        significand: significand >>
-        exrad: opt!(exrad) >>
-        (sign.unwrap_or(Sign::Pos)  * significand, exrad.unwrap_or(0))
-    ));
-
-named!(significand<Span, f64>,
-    alt!(
-        pair!(opt!(integer), fraction) => {
-            |(integral, frac): (Option<u64>, f64)| integral.unwrap_or(0) as f64 + frac
+            exrad: numeric_rep.1,
         }
-        | pair!(integer, opt!(char!('.'))) => { |(i, _)| i as f64 }
-    ));
+    })(i)
+}
 
-named!(integer<Span, u64>,
-    map_res!(take_while1!(is_digit), u64_from_decimal));
+fn sign<'a>(i: &'a str) -> IResult<&'a str, ast::Sign, Error> {
+    alt((
+        map(char('+'), |_| ast::Sign::Pos),
+        map(char('-'), |_| ast::Sign::Neg),
+    ))(i)
+}
 
-named!(fraction<Span, f64>,
-    map_res!(preceded!(char!('.'), take_while1!(is_digit)),
-        |s| u64_from_decimal(s).map(|frac| {
-            frac as f64 / (10_u64.pow(s.fragment.len() as u32) as f64)
-        })));
-
-named!(exrad<Span, i32>,
-    map!(
-        preceded!(char!('E'),
-            pair!(
-                opt!(sign),
-                map_res!(take_while1!(is_digit), i32_from_decimal)
+fn numeric_rep<'a>(i: &'a str) -> IResult<&'a str, (f64, i32), Error> {
+    map(
+        tuple((opt(sign), significand, opt(exrad))),
+        |(sign, significand, exrad)| {
+            (
+                sign.unwrap_or(ast::Sign::Pos) * significand,
+                exrad.unwrap_or(0),
             )
-        ),
-        |(sign, exp)| sign.unwrap_or(Sign::Pos) * exp
-    ));
+        },
+    )(i)
+}
 
-named!(string_constant<Span, StringConstant>,
-    do_parse!(
-        s: delimited!(char!('"'), take_until!("\""), char!('"')) >>
-        (StringConstant(s.to_string()))
-    ));
+fn significand<'a>(i: &'a str) -> IResult<&'a str, f64, Error> {
+    alt((
+        map(pair(opt(integer), fraction), |(integer, fraction)| {
+            integer.unwrap_or(0) as f64 + fraction
+        }),
+        map(terminated(integer, opt(full_stop)), |integer| {
+            integer as f64
+        }),
+    ))(i)
+}
+
+fn integer<'a>(i: &'a str) -> IResult<&'a str, u64, Error> {
+    map_res(take_while1(is_digit), |digits| {
+        u64::from_str_radix(digits, 10)
+    })(i)
+}
+
+fn fraction<'a>(i: &'a str) -> IResult<&'a str, f64, Error> {
+    map_res(preceded(full_stop, take_while1(is_digit)), |digits| {
+        u64::from_str_radix(digits, 10)
+            .map(|frac| frac as f64 / (10_u64.pow(digits.len() as u32) as f64))
+    })(i)
+}
+
+fn exrad<'a>(i: &'a str) -> IResult<&'a str, i32, Error> {
+    map(
+        preceded(char('E'), pair(opt(sign), integer)),
+        |(sign, exp)| sign.unwrap_or(ast::Sign::Pos) * exp as i32,
+    )(i)
+}
+
+fn string_constant<'a>(i: &'a str) -> IResult<&'a str, ast::StringConstant, Error> {
+    // TODO: Avoid cloning here
+    map(quoted_string, |s| ast::StringConstant(s.to_string()))(i)
+}
 
 // 7. Variables
 
-named!(variable<Span, Variable>,
-    alt!(
-        map!(string_variable, Variable::String) |
-        map!(numeric_variable, Variable::Numeric)
-    ));
+fn variable<'a>(i: &'a str) -> IResult<&'a str, ast::Variable, Error> {
+    alt((
+        map(string_variable, ast::Variable::String),
+        map(numeric_variable, ast::Variable::Numeric),
+    ))(i)
+}
 
-named!(numeric_variable<Span, NumericVariable>,
-    alt!(
-        map!(numeric_array_element, NumericVariable::Array) |
-        map!(simple_numeric_variable, NumericVariable::Simple)
-    ));
+fn numeric_variable<'a>(i: &'a str) -> IResult<&'a str, ast::NumericVariable, Error> {
+    alt((
+        map(numeric_array_element, ast::NumericVariable::Array),
+        map(simple_numeric_variable, ast::NumericVariable::Simple),
+    ))(i)
+}
 
-named!(simple_numeric_variable<Span, SimpleNumericVariable>,
-    do_parse!(
-        letter: letter >>
-        digit: opt!(digit) >>
-        (SimpleNumericVariable { letter, digit })
-    ));
+fn simple_numeric_variable<'a>(i: &'a str) -> IResult<&'a str, ast::SimpleNumericVariable, Error> {
+    map(
+        pair(letter, opt(map(digit, |c| c as u8 - b'0'))),
+        |(letter, digit)| ast::SimpleNumericVariable { letter, digit },
+    )(i)
+}
 
-named!(numeric_array_element<Span, ArrayVariable>,
-    do_parse!(
-        numeric_array_name: letter >>
-        subscript: subscript >>
-        (ArrayVariable {
-            letter: numeric_array_name,
-            subscript,
-        })
-    ));
+fn numeric_array_element<'a>(i: &'a str) -> IResult<&'a str, ast::ArrayVariable, Error> {
+    map(
+        pair(numeric_array_name, subscript),
+        |(letter, subscript)| ast::ArrayVariable { letter, subscript },
+    )(i)
+}
 
-named!(subscript<Span, (NumericExpression, Option<NumericExpression>)>,
-    do_parse!(
-        char!('(') >>
-        subscript1: numeric_expression >>
-        subscript2: opt!(preceded!(char!(','), numeric_expression)) >>
-        char!(')') >>
-        ((subscript1, subscript2))
-    ));
+fn numeric_array_name<'a>(i: &'a str) -> IResult<&'a str, char, Error> {
+    letter(i)
+}
 
-named!(string_variable<Span, StringVariable>,
-    map!(terminated!(letter, char!('$')), StringVariable));
+fn subscript<'a>(
+    i: &'a str,
+) -> IResult<&'a str, (ast::NumericExpression, Option<ast::NumericExpression>), Error> {
+    let inner = pair(
+        numeric_expression,
+        opt(preceded(char(','), numeric_expression)),
+    );
+    preceded(char('('), terminated(inner, char(')')))(i)
+}
+
+fn string_variable<'a>(i: &'a str) -> IResult<&'a str, ast::StringVariable, Error> {
+    map(terminated(letter, char('$')), ast::StringVariable)(i)
+}
 
 // 8. Expressions
 
-named!(expression<Span, Expression>,
-    alt!(
-        // Note: Since numeric_expression sometimes matches a prefix of a string_expression,
-        // first we need to try to parse string_expression, and only after it numeric_expression.
-        map!(string_expression, Expression::String) |
-        map!(numeric_expression, Expression::Numeric)
+fn expression<'a>(i: &'a str) -> IResult<&'a str, ast::Expression, Error> {
+    alt((
+        map(string_expression, ast::Expression::String),
+        map(numeric_expression, ast::Expression::Numeric),
+    ))(i)
+}
+
+fn numeric_expression<'a>(i: &'a str) -> IResult<&'a str, ast::NumericExpression, Error> {
+    let leading_sign = terminated(opt(sign), space0);
+    let leading_term = term;
+    let terms = many0(pair(preceded(space0, sign), preceded(space0, term)));
+    map(
+        tuple((leading_sign, leading_term, terms)),
+        |(leading_sign, leading_term, terms)| {
+            ast::NumericExpression::new(leading_sign, leading_term, terms)
+        },
+    )(i)
+}
+
+fn term<'a>(i: &'a str) -> IResult<&'a str, ast::Term, Error> {
+    let factors = many0(pair(preceded(space0, multiplier), preceded(space0, factor)));
+    map(pair(factor, factors), |(leading_factor, factors)| {
+        ast::Term::new(leading_factor, factors)
+    })(i)
+}
+
+fn factor<'a>(i: &'a str) -> IResult<&'a str, ast::Factor, Error> {
+    let primaries = many0(preceded(
+        preceded(space0, char('^')),
+        preceded(space0, primary),
     ));
+    map(pair(primary, primaries), |(leading_primary, primaries)| {
+        ast::Factor::new(leading_primary, primaries)
+    })(i)
+}
 
-named!(numeric_expression<Span, NumericExpression>,
-    do_parse!(
-        leading_sign: opt!(sign) >>
-        space0 >>
-        leading_term: term >>
-        terms: many0!(pair!(
-            preceded!(space0, sign),
-            preceded!(space0, term))) >>
-        (NumericExpression::new(leading_sign, leading_term, terms))
-    ));
+fn multiplier<'a>(i: &'a str) -> IResult<&'a str, ast::Multiplier, Error> {
+    alt((
+        map(char('*'), |_| ast::Multiplier::Mul),
+        map(char('/'), |_| ast::Multiplier::Div),
+    ))(i)
+}
 
-named!(term<Span, Term>,
-    do_parse!(
-        leading_factor: factor >>
-        factors: many0!(pair!(
-            preceded!(space0, multiplier),
-            preceded!(space0, factor))) >>
-        (Term::new(leading_factor, factors))
-    ));
+fn primary<'a>(i: &'a str) -> IResult<&'a str, ast::Primary, Error> {
+    alt((
+        map(numeric_function_ref, ast::Primary::Function),
+        map(numeric_defined_function_ref, ast::Primary::DefFunctionCall),
+        map(numeric_variable, ast::Primary::Variable),
+        map(numeric_rep, |value| {
+            ast::Primary::Constant(ast::NumericConstant::from(value))
+        }),
+        map(
+            preceded(char('('), terminated(numeric_expression, char(')'))),
+            ast::Primary::Expression,
+        ),
+    ))(i)
+}
 
-named!(factor<Span, Factor>,
-    do_parse!(
-        leading_primary: primary >>
-        primaries: many0!(preceded!(
-            preceded!(space0, char!('^')),
-            preceded!(space0, primary))) >>
-        (Factor::new(leading_primary, primaries))
-    ));
+fn numeric_function_ref<'a>(i: &'a str) -> IResult<&'a str, ast::Function, Error> {
+    alt((
+        map(preceded(tag("ABS"), argument_list), ast::Function::Abs),
+        map(preceded(tag("ATN"), argument_list), ast::Function::Atn),
+        map(preceded(tag("COS"), argument_list), ast::Function::Cos),
+        map(preceded(tag("EXP"), argument_list), ast::Function::Exp),
+        map(preceded(tag("INT"), argument_list), ast::Function::Int),
+        map(preceded(tag("LOG"), argument_list), ast::Function::Log),
+        map(tag("RND"), |_| ast::Function::Rnd),
+        map(preceded(tag("SGN"), argument_list), ast::Function::Sgn),
+        map(preceded(tag("SIN"), argument_list), ast::Function::Sin),
+        map(preceded(tag("SQR"), argument_list), ast::Function::Sqr),
+        map(preceded(tag("TAN"), argument_list), ast::Function::Tan),
+    ))(i)
+}
 
-named!(multiplier<Span, Multiplier>,
-    alt!(
-        char!('*') => { |_| Multiplier::Mul } |
-        char!('/') => { |_| Multiplier::Div }
-    ));
+fn numeric_defined_function_ref<'a>(i: &'a str) -> IResult<&'a str, ast::DefFunctionCall, Error> {
+    map(
+        pair(numeric_defined_function, opt(argument_list)),
+        |(name, arg)| ast::DefFunctionCall { name, arg },
+    )(i)
+}
 
-named!(primary<Span, Primary>,
-    alt!(
-        map!(numeric_function_ref, Primary::Function) |
-        map!(numeric_defined_function_ref, Primary::DefFunctionCall) |
-        map!(numeric_variable, Primary::Variable) |
-        numeric_rep => { |value| Primary::Constant(NumericConstant::from(value)) } |
-        map!(delimited!(char!('('), numeric_expression, char!(')')), Primary::Expression)
-    ));
+fn argument_list<'a>(i: &'a str) -> IResult<&'a str, ast::NumericExpression, Error> {
+    preceded(char('('), terminated(numeric_expression, char(')')))(i)
+}
 
-named!(numeric_function_ref<Span, Function>,
-    alt!(
-        pair!(tag!("ABS"), argument_list) => { |(_, arg)| Function::Abs(arg) } |
-        pair!(tag!("ATN"), argument_list) => { |(_, arg)| Function::Atn(arg) } |
-        pair!(tag!("COS"), argument_list) => { |(_, arg)| Function::Cos(arg) } |
-        pair!(tag!("EXP"), argument_list) => { |(_, arg)| Function::Exp(arg) } |
-        pair!(tag!("INT"), argument_list) => { |(_, arg)| Function::Int(arg) } |
-        pair!(tag!("LOG"), argument_list) => { |(_, arg)| Function::Log(arg) } |
-        tag!("RND") => { |_| Function::Rnd } |
-        pair!(tag!("SGN"), argument_list) => { |(_, arg)| Function::Sgn(arg) } |
-        pair!(tag!("SIN"), argument_list) => { |(_, arg)| Function::Sin(arg) } |
-        pair!(tag!("SQR"), argument_list) => { |(_, arg)| Function::Sqr(arg) } |
-        pair!(tag!("TAN"), argument_list) => { |(_, arg)| Function::Tan(arg) }
-    ));
+fn string_expression<'a>(i: &'a str) -> IResult<&'a str, ast::StringExpression, Error> {
+    alt((
+        map(string_variable, ast::StringExpression::Variable),
+        map(string_constant, ast::StringExpression::Constant),
+    ))(i)
+}
 
-named!(numeric_defined_function_ref<Span, DefFunctionCall>,
-    map!(pair!(numeric_defined_function, opt!(argument_list)),
-        |(f, arg)| { DefFunctionCall { name: f, arg } }
-    ));
-
-named!(argument_list<Span, NumericExpression>,
-    delimited!(char!('('), numeric_expression, char!(')')));
-
-named!(string_expression<Span, StringExpression>,
-    alt!(
-        map!(string_variable, StringExpression::Variable) |
-        map!(string_constant, StringExpression::Constant)
-    ));
-
-named!(relation<Span, Relation>,
-    alt!(
-        tag!("==") => { |_| Relation::EqualTo } |
-        tag!("=") => { |_| Relation::EqualTo} |
-        tag!("<>") => { |_| Relation::NotEqualTo } |
-        tag!("<=") => { |_| Relation::LessThanOrEqualTo } |
-        tag!(">=") => { |_| Relation::GreaterThanOrEqualTo } |
-        tag!("<") => { |_| Relation::LessThan } |
-        tag!(">") => { |_| Relation::GreaterThan }
-    )
-);
-
-named!(equality_relation<Span, EqualityRelation>,
-    alt!(
-        tag!("==") => { |_| EqualityRelation::EqualTo } |
-        tag!("=") => { |_| EqualityRelation::EqualTo} |
-        tag!("<>") => { |_| EqualityRelation::NotEqualTo }
-    )
-);
+// 9. Implementation supplied functions
+//
+// The only rule `numeric_supplied_function` is merged with `numeric_function_ref`.
 
 // 10. User defined functions
 
-named!(def_statement<Span, Statement>,
-    do_parse!(
-        tag!("DEF") >>
-        space >>
-        name: numeric_defined_function >>
-        parameter: opt!(delimited!(char!('('), simple_numeric_variable, char!(')'))) >>
-        space0 >>
-        char!('=') >>
-        space0 >>
-        expression: numeric_expression >>
-        (Statement::Def(DefFunction{
-            name,
-            parameter,
-            expression
-        }))
-    ));
+fn def_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    let def = terminated(tag("DEF"), space1);
+    let equal_sign = preceded(space0, terminated(char('='), space0));
+    map(
+        tuple((
+            def,
+            numeric_defined_function,
+            opt(parameter_list),
+            equal_sign,
+            numeric_expression,
+        )),
+        |(_, name, parameter, _, expression)| {
+            ast::Statement::Def(ast::DefFunction {
+                name,
+                parameter,
+                expression,
+            })
+        },
+    )(i)
+}
 
-named!(numeric_defined_function<Span, char>,
-    preceded!(tag!("FN"), letter));
+fn numeric_defined_function<'a>(i: &'a str) -> IResult<&'a str, char, Error> {
+    preceded(tag("FN"), letter)(i)
+}
+
+fn parameter_list<'a>(i: &'a str) -> IResult<&'a str, ast::SimpleNumericVariable, Error> {
+    preceded(char('('), terminated(parameter, char(')')))(i)
+}
+
+fn parameter<'a>(i: &'a str) -> IResult<&'a str, ast::SimpleNumericVariable, Error> {
+    simple_numeric_variable(i)
+}
 
 // 11. LET statement
 
-named!(let_statement<Span, Statement>,
-    map!(alt!(numeric_let_statement | string_let_statement), Statement::Let));
+fn let_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    map(
+        alt((numeric_let_statement, string_let_statement)),
+        ast::Statement::Let,
+    )(i)
+}
 
-named!(numeric_let_statement<Span, LetStatement>,
-    do_parse!(
-        tag!("LET") >> space >>
-        variable: numeric_variable >>
-        space0 >>
-        tag!("=") >>
-        space0 >>
-        expression: numeric_expression >>
-        (LetStatement::Numeric{ variable, expression })
-    ));
+fn numeric_let_statement<'a>(i: &'a str) -> IResult<&'a str, ast::LetStatement, Error> {
+    let let_tag = terminated(tag("LET"), space1);
+    let equal_sign = preceded(space0, terminated(char('='), space0));
+    map(
+        tuple((let_tag, numeric_variable, equal_sign, numeric_expression)),
+        |(_, variable, _, expression)| ast::LetStatement::Numeric {
+            variable,
+            expression,
+        },
+    )(i)
+}
 
-named!(string_let_statement<Span, LetStatement>,
-    do_parse!(
-        tag!("LET") >> space >>
-        variable: string_variable >>
-        space0 >>
-        tag!("=") >>
-        space0 >>
-        expression: string_expression >>
-        (LetStatement::String{ variable, expression })
-    ));
+fn string_let_statement<'a>(i: &'a str) -> IResult<&'a str, ast::LetStatement, Error> {
+    let let_tag = terminated(tag("LET"), space1);
+    let equal_sign = preceded(space0, terminated(char('='), space0));
+    map(
+        tuple((let_tag, string_variable, equal_sign, string_expression)),
+        |(_, variable, _, expression)| ast::LetStatement::String {
+            variable,
+            expression,
+        },
+    )(i)
+}
 
 // 12. Control statements
 
-named!(goto_statement<Span, Statement>,
-    do_parse!(
-        tag!("GO") >>
-        space0 >>
-        tag!("TO") >>
-        space0 >>
-        line_number: line_number >>
-        (Statement::Goto(line_number))
-    ));
+fn goto_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    let go = terminated(tag("GO"), space0);
+    let to = terminated(tag("TO"), space1);
+    map(
+        preceded(go, preceded(to, line_number)),
+        ast::Statement::Goto,
+    )(i)
+}
 
-named!(gosub_statement<Span, Statement>,
-    do_parse!(
-        tag!("GO") >>
-        space0 >>
-        tag!("SUB") >>
-        space0 >>
-        line_number: line_number >>
-        (Statement::Gosub(line_number))
-    ));
+fn if_then_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    let if_tag = terminated(tag("IF"), space1);
+    let if_statement = terminated(relational_expression, space1);
+    let then_tag = terminated(tag("THEN"), space1);
+    map(
+        tuple((if_tag, if_statement, then_tag, line_number)),
+        |(_, if_statement, _, line_number)| ast::Statement::IfThen(if_statement, line_number),
+    )(i)
+}
 
-named!(if_then_statement<Span, Statement>,
-    do_parse!(
-        tag!("IF") >>
-        space0 >>
-        if_statement: relational_expression >>
-        space0 >>
-        tag!("THEN") >>
-        space0 >>
-        line_number: line_number >>
-        (Statement::IfThen(if_statement, line_number))
-    ));
+fn relational_expression<'a>(i: &'a str) -> IResult<&'a str, ast::RelationalExpression, Error> {
+    let relation = preceded(space0, terminated(relation, space0));
+    let equality_relation = preceded(space0, terminated(equality_relation, space0));
+    alt((
+        map(
+            tuple((numeric_expression, relation, numeric_expression)),
+            |(left_expression, relation, right_expression)| {
+                ast::RelationalExpression::NumericComparison(
+                    left_expression,
+                    relation,
+                    right_expression,
+                )
+            },
+        ),
+        map(
+            tuple((string_expression, equality_relation, string_expression)),
+            |(left_expression, relation, right_expression)| {
+                ast::RelationalExpression::StringComparison(
+                    left_expression,
+                    relation,
+                    right_expression,
+                )
+            },
+        ),
+    ))(i)
+}
 
-named!(relational_expression<Span, RelationalExpression>,
-    alt!(
-        do_parse!(
-        left_expression: numeric_expression >>
-        space0 >>
-        relation: relation >>
-        space0 >>
-        right_expression: numeric_expression >>
-        (RelationalExpression::NumericComparison(left_expression, relation, right_expression))
-    ) |
-    do_parse!(
-        left_expression: string_expression >>
-        space0 >>
-        relation: equality_relation >>
-        space0 >>
-        right_expression: return_error!(ErrorKind::Custom(
-            ErrorCode::ExpectedStringExpression as u32), string_expression) >>
-        (RelationalExpression::StringComparison(left_expression, relation, right_expression))
-    ))
-);
+fn relation<'a>(i: &'a str) -> IResult<&'a str, ast::Relation, Error> {
+    alt((
+        map(tag("=="), |_| ast::Relation::EqualTo),
+        map(char('='), |_| ast::Relation::EqualTo),
+        map(tag("<>"), |_| ast::Relation::NotEqualTo),
+        map(tag("<="), |_| ast::Relation::LessThanOrEqualTo),
+        map(tag(">="), |_| ast::Relation::GreaterThanOrEqualTo),
+        map(char('<'), |_| ast::Relation::LessThan),
+        map(char('>'), |_| ast::Relation::GreaterThan),
+    ))(i)
+}
 
-named!(return_statement<Span, Statement>,
-    do_parse!(
-        tag!("RETURN") >>
-        (Statement::Return)
-    ));
+fn equality_relation<'a>(i: &'a str) -> IResult<&'a str, ast::EqualityRelation, Error> {
+    alt((
+        map(tag("=="), |_| ast::EqualityRelation::EqualTo),
+        map(char('='), |_| ast::EqualityRelation::EqualTo),
+        map(tag("<>"), |_| ast::EqualityRelation::NotEqualTo),
+    ))(i)
+}
 
-named!(on_goto_statement<Span, Statement>,
-    do_parse!(
-        tag!("ON") >>
-        space >>
-        numeric_expression: numeric_expression >>
-        space >>
-        tag!("GO") >>
-        space0 >>
-        tag!("TO") >>
-        space >>
-        line_numbers: separated_nonempty_list!(
-            delimited!(space0, char!(','), space0), line_number) >>
-        (Statement::OnGoto(OnGotoStatement { numeric_expression, line_numbers }))
-    ));
+fn gosub_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    let go = terminated(tag("GO"), space0);
+    let to = terminated(tag("SUB"), space1);
+    map(
+        preceded(go, preceded(to, line_number)),
+        ast::Statement::Gosub,
+    )(i)
+}
 
-named!(stop_statement<Span, Statement>,
-    do_parse!(
-        tag!("STOP") >>
-        (Statement::Stop)
-    ));
+fn return_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    map(tag("RETURN"), |_| ast::Statement::Return)(i)
+}
+
+fn on_goto_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    let on = terminated(tag("ON"), space1);
+    let go = terminated(tag("GO"), space0);
+    let to = terminated(tag("TO"), space1);
+
+    let numeric_expression = terminated(numeric_expression, space1);
+    let line_numbers = separated_nonempty_list(delimited(space0, char(','), space0), line_number);
+
+    map(
+        pair(
+            preceded(on, numeric_expression),
+            preceded(go, preceded(to, line_numbers)),
+        ),
+        |(numeric_expression, line_numbers)| {
+            ast::Statement::OnGoto(ast::OnGotoStatement {
+                numeric_expression,
+                line_numbers,
+            })
+        },
+    )(i)
+}
+
+fn stop_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    map(tag("STOP"), |_| ast::Statement::Stop)(i)
+}
 
 // 13. FOR and NEXT statements
 
-named!(for_block<Span, Block>,
-    do_parse!(
-        for_line: for_line >>
-        for_body: for_body >>
-        (Block::For {
+fn for_block<'a>(i: &'a str) -> IResult<&'a str, ast::Block, Error> {
+    map(
+        pair(for_line, for_body),
+        |(for_line, (blocks, next_line))| ast::Block::For {
             for_line,
-            blocks: for_body.0,
-            next_line: for_body.1,
-        })
-    ));
+            blocks,
+            next_line,
+        },
+    )(i)
+}
 
-named!(for_body<Span, (Vec<Block>, NextLine)>,
-    do_parse!(
-        blocks: many0!(block) >>
-        next_line: return_error!(ErrorKind::Custom(ErrorCode::ForWithoutNext as u32), next_line) >>
-        ((blocks, next_line))
-    ));
+fn for_body<'a>(i: &'a str) -> IResult<&'a str, (Vec<ast::Block>, ast::NextLine), Error> {
+    // TODO: Note that our block definition always contains a single line, therefore we parse
+    // several blocks here, which is different to the rule from the spec.
+    pair(many0(block), next_line)(i)
+}
 
-named!(for_line<Span, ForLine>,
-    do_parse!(
-        line_number: line_number >>
-        space >>
-        statement_source: position!() >>
-        for_statement: for_statement >>
-        space0 >>
-        end_of_line >>
-        (ForLine{
+fn for_line<'a>(i: &'a str) -> IResult<&'a str, ast::ForLine, Error> {
+    map(
+        tuple((
+            terminated(line_number, space1),
+            terminated(for_statement, space0),
+            end_of_line,
+        )),
+        |(line_number, for_statement, _)| ast::ForLine {
             line_number,
             for_statement,
-            statement_source,
-        })
-    ));
+            statement_source: i,
+        },
+    )(i)
+}
 
-named!(pub next_line<Span, NextLine>,
-    do_parse!(
-        line_number: line_number >>
-        space >>
-        statement_source: position!() >>
-        next_statement: next_statement >>
-        space0 >>
-        end_of_line >>
-        (NextLine{
+pub fn next_line<'a>(i: &'a str) -> IResult<&'a str, ast::NextLine, Error> {
+    map(
+        tuple((
+            terminated(line_number, space1),
+            terminated(next_statement, space0),
+            end_of_line,
+        )),
+        |(line_number, next_statement, _)| ast::NextLine {
             line_number,
             next_statement,
-            statement_source,
-        })
-    ));
+            statement_source: i,
+        },
+    )(i)
+}
 
-named!(for_statement<Span, ForStatement>,
-    do_parse!(
-        tag!("FOR") >>
-        space >>
-        control_variable: simple_numeric_variable >>
-        space0 >>
-        char!('=') >>
-        space0 >>
-        initial_value: numeric_expression >>
-        space >>
-        tag!("TO") >>
-        space >>
-        limit: numeric_expression >>
-        space0 >>
-        opt!(tag!("STEP")) >>
-        space0 >>
-        increment: opt!(numeric_expression) >>
-        space0 >>
-        (ForStatement {
+fn for_statement<'a>(i: &'a str) -> IResult<&'a str, ast::ForStatement, Error> {
+    let for_tag = terminated(tag("FOR"), space1);
+    let equal_sign = preceded(space0, terminated(char('='), space0));
+    let to_tag = preceded(space1, terminated(tag("TO"), space1));
+    let step_tag = preceded(space1, terminated(tag("STEP"), space1));
+
+    map(
+        tuple((
+            preceded(for_tag, simple_numeric_variable),
+            preceded(equal_sign, numeric_expression),
+            preceded(to_tag, numeric_expression),
+            opt(preceded(step_tag, numeric_expression)),
+        )),
+        |(control_variable, initial_value, limit, increment)| ast::ForStatement {
             control_variable,
             initial_value,
             limit,
-            increment
-        })
-    ));
+            increment,
+        },
+    )(i)
+}
 
-named!(next_statement<Span, NextStatement>,
-    do_parse!(
-        tag!("NEXT") >>
-        space >>
-        control_variable: simple_numeric_variable >>
-        (NextStatement {
-            control_variable
-        })
-    ));
+fn next_statement<'a>(i: &'a str) -> IResult<&'a str, ast::NextStatement, Error> {
+    let next_tag = terminated(tag("NEXT"), space1);
+    map(
+        preceded(next_tag, simple_numeric_variable),
+        |control_variable| ast::NextStatement { control_variable },
+    )(i)
+}
 
 // 14. PRINT statement
 
-named!(print_statement<Span, Statement>,
-    do_parse!(
-        tag!("PRINT") >>
-        print_list: opt!(sep!(space, print_list)) >>
-        (Statement::Print(PrintStatement{ list: print_list.unwrap_or_else(Vec::new) }))
-    ));
+fn print_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    let print_tag = tag("PRINT");
+    map(
+        preceded(print_tag, opt(preceded(space1, print_list))),
+        |list| {
+            ast::Statement::Print(ast::PrintStatement {
+                list: list.unwrap_or_else(Vec::new),
+            })
+        },
+    )(i)
+}
 
-named!(print_list<Span, Vec<PrintItem>>,
-    do_parse!(
-        items: many0!(pair!(opt!(print_item), print_separator)) >>
-        trailing_item: opt!(print_item) >>
-        (new_print_items(items, trailing_item))
-    ));
+fn print_list<'a>(i: &'a str) -> IResult<&'a str, Vec<ast::PrintItem>, Error> {
+    let items = many0(pair(opt(print_item), print_separator));
+    let trailing_item = opt(print_item);
+    map(pair(items, trailing_item), |(items, trailing_item)| {
+        ast::new_print_items(items, trailing_item)
+    })(i)
+}
 
-named!(print_item<Span, PrintItem>,
-    alt!(
+fn print_item<'a>(i: &'a str) -> IResult<&'a str, ast::PrintItem, Error> {
+    alt((
         // Note: expression consumes T of TAB, therefore tab_call needs to be parsed first.
-        tab_call |
-        map!(expression, PrintItem::Expression)
-    ));
+        tab_call,
+        map(expression, ast::PrintItem::Expression),
+    ))(i)
+}
 
-named!(tab_call<Span, PrintItem>,
-    map!(
-        delimited!(tag!("TAB("), numeric_expression, char!(')')),
-        PrintItem::TabCall
-    ));
+fn tab_call<'a>(i: &'a str) -> IResult<&'a str, ast::PrintItem, Error> {
+    map(
+        preceded(tag("TAB("), terminated(numeric_expression, char(')'))),
+        ast::PrintItem::TabCall,
+    )(i)
+}
 
-named!(print_separator<Span, PrintItem>,
-    terminated!(preceded!(space0, alt!(
-        char!(',') => { |_| PrintItem::Comma } |
-        char!(';') => { |_| PrintItem::Semicolon }
-    )), space0));
+fn print_separator<'a>(i: &'a str) -> IResult<&'a str, ast::PrintItem, Error> {
+    let separator = alt((
+        map(char(','), |_| ast::PrintItem::Comma),
+        map(char(';'), |_| ast::PrintItem::Semicolon),
+    ));
+    preceded(space0, terminated(separator, space0))(i)
+}
 
 // 15. INPUT statement
 
-named!(input_statement<Span, Statement>,
-    do_parse!(
-        tag!("INPUT") >>
-        space >>
-        variables: separated_nonempty_list!(char!(','), variable) >>
-        (Statement::Input(variables))
-    )
-);
+fn input_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    let input_tag = terminated(tag("INPUT"), space1);
+    let separator = preceded(space0, terminated(char(','), space0));
+    let variables = separated_nonempty_list(separator, variable);
+    map(preceded(input_tag, variables), ast::Statement::Input)(i)
+}
 
-named!(pub input_reply<Span, Vec<Datum>>,
-    separated_nonempty_list!(
-        char!(','), delimited!(space0, datum, space0)));
+pub fn input_reply<'a>(i: &'a str) -> IResult<&'a str, Vec<ast::Datum>, Error> {
+    let padded_datum = preceded(space0, terminated(datum, space0));
+    separated_nonempty_list(char(','), padded_datum)(i)
+}
+
+fn datum<'a>(i: &'a str) -> IResult<&'a str, ast::Datum, Error> {
+    // TODO: Avoid using owned string.
+    alt((
+        map(unquoted_string, |s| {
+            ast::Datum::Unquoted(ast::StringConstant(s.to_string()))
+        }),
+        map(string_constant, ast::Datum::Quoted),
+    ))(i)
+}
 
 // 16. READ and RESTORE statements
 
-named!(read_statement<Span, Statement>,
-    do_parse!(
-        tag!("READ") >>
-        space >>
-        variables: separated_nonempty_list!(char!(','), variable) >>
-        (Statement::Read(variables))
-    )
-);
+fn read_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    let read_tag = terminated(tag("READ"), space1);
+    let separator = preceded(space0, terminated(char(','), space0));
+    let variables = separated_nonempty_list(separator, variable);
+    map(preceded(read_tag, variables), ast::Statement::Read)(i)
+}
 
-named!(restore_statement<Span, Statement>,
-    map!(tag!("RESTORE"), |_| Statement::Restore));
+fn restore_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    map(tag("RESTORE"), |_| ast::Statement::Restore)(i)
+}
 
 // 17. DATA statement
 
-named!(data_statement<Span, Statement>,
-    do_parse!(
-        tag!("DATA") >>
-        space >>
-        data: data_list >>
-        (Statement::Data(data))
-    ));
+fn data_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    let data_tag = terminated(tag("DATA"), space1);
+    map(preceded(data_tag, data_list), ast::Statement::Data)(i)
+}
 
-named!(data_list<Span, Vec<Datum>>,
-    separated_nonempty_list!(
-        delimited!(space0, char!(','), space0), datum));
-
-named!(datum<Span, Datum>,
-    alt!(
-        map!(unquoted_string, |s| Datum::Unquoted(StringConstant(s))) |
-        map!(string_constant, Datum::Quoted)
-    ));
+fn data_list<'a>(i: &'a str) -> IResult<&'a str, Vec<ast::Datum>, Error> {
+    let separator = preceded(space0, terminated(char(','), space0));
+    separated_nonempty_list(separator, datum)(i)
+}
 
 // 18. ARRAY declarations
 
-named!(dimension_statement<Span, Statement>,
-    do_parse!(
-        tag!("DIM") >>
-        space >>
-        array_declarations: separated_nonempty_list!(
-            delimited!(space0, char!(','), space0), array_declaration) >>
-        (Statement::Dim(array_declarations))
-    ));
+fn dimension_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    let dim_tag = terminated(tag("DIM"), space1);
+    let separator = preceded(space0, terminated(char(','), space0));
+    let array_declarations = separated_nonempty_list(separator, array_declaration);
+    map(preceded(dim_tag, array_declarations), ast::Statement::Dim)(i)
+}
 
-named!(array_declaration<Span, ArrayDeclaration>,
-    do_parse!(
-        letter: letter >>
-        char!('(') >>
-        bounds: bounds >>
-        char!(')') >>
-        (ArrayDeclaration{ letter, bounds })
-    ));
+fn array_declaration<'a>(i: &'a str) -> IResult<&'a str, ast::ArrayDeclaration, Error> {
+    map(
+        pair(letter, preceded(char('('), terminated(bounds, char(')')))),
+        |(letter, bounds)| ast::ArrayDeclaration { letter, bounds },
+    )(i)
+}
 
-named!(bounds<Span, (u64, Option<u64>)>,
-    pair!(integer, opt!(preceded!(char!(','), integer))));
+fn bounds<'a>(i: &'a str) -> IResult<&'a str, (u64, Option<u64>), Error> {
+    pair(integer, opt(preceded(char(','), integer)))(i)
+}
 
-named!(option_base_statement<Span, Statement>,
-    do_parse!(
-        tag!("OPTION") >>
-        space >>
-        tag!("BASE") >>
-        space >>
-        n: alt!(char!('0') | char!('1')) >>
-        (Statement::OptionBase(if n == '0' { OptionBase::Base0 } else { OptionBase::Base1 }))
+fn option_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    let option_tag = terminated(tag("OPTION"), space1);
+    let base_tag = terminated(tag("BASE"), space1);
+    let n = alt((
+        map(char('0'), |_| ast::OptionBase::Base0),
+        map(char('1'), |_| ast::OptionBase::Base1),
     ));
+    map(
+        preceded(option_tag, preceded(base_tag, n)),
+        ast::Statement::OptionBase,
+    )(i)
+}
 
 // 19. REMARK statement
 
-named!(remark_statement<Span, Statement>,
-    do_parse!(
-        tag!("REM") >>
-        take_until!("\n") >>
-        (Statement::Rem)
-    ));
-
-// helper
-
-fn from_decimal(input: Span) -> Result<u16, num::ParseIntError> {
-    u16::from_str_radix(&input.fragment, 10)
+fn remark_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    map(preceded(tag("REM"), remark_string), |_| ast::Statement::Rem)(i)
 }
 
-fn u64_from_decimal(input: Span) -> Result<u64, num::ParseIntError> {
-    u64::from_str_radix(&input.fragment, 10)
-}
+// 20. RANDOMIZE statement
 
-fn i32_from_decimal(input: Span) -> Result<i32, num::ParseIntError> {
-    i32::from_str_radix(&input.fragment, 10)
+fn randomize_statement<'a>(i: &'a str) -> IResult<&'a str, ast::Statement, Error> {
+    map(tag("RANDOMIZE"), |_| ast::Statement::Randomize)(i)
 }
 
 #[cfg(test)]
@@ -747,107 +787,133 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_tab_call() {
-        let res = tab_call(Span::new(CompleteStr("TAB(24)")));
-        let (remaining, ast) = res.expect("failed to parse");
-        let remaining = remaining.fragment;
-        assert!(remaining.is_empty(), "Remaing is not empty: {}", remaining);
-        assert_eq!(
-            ast,
-            PrintItem::TabCall(NumericExpression::new(
-                None,
-                Term::new(
-                    Factor::new(Primary::Constant(NumericConstant::from((24.0, 0))), vec![]),
-                    vec![]
-                ),
-                vec![]
-            ))
-        );
-    }
-
-    #[test]
-    fn test_print_tab_call() {
-        let res = print_statement(Span::new(CompleteStr("PRINT TAB(24)")));
-        let (remaining, ast) = res.expect("failed to parse");
-        let remaining = remaining.fragment;
-        assert!(remaining.is_empty(), "Remaing is not empty: {}", remaining);
-        assert_eq!(
-            ast,
-            Statement::Print(PrintStatement {
-                list: vec![PrintItem::TabCall(NumericExpression::new(
-                    None,
-                    Term::new(
-                        Factor::new(Primary::Constant(NumericConstant::from((24.0, 0))), vec![]),
-                        vec![]
-                    ),
-                    vec![],
-                ))],
-            })
-        );
-    }
-
-    #[test]
-    fn test_print_constant() {
-        let res = print_statement(Span::new(CompleteStr(r#"PRINT " 0 ",0.000888," 0 ",-1.0"#)));
-        let (remaining, ast) = res.expect("failed to parse");
-        let remaining = remaining.fragment;
-        assert!(remaining.is_empty(), "Remaing is not empty: {}", remaining);
-        assert_eq!(
-            ast,
-            Statement::Print(PrintStatement {
-                list: vec![
-                    PrintItem::Expression(Expression::String(StringExpression::Constant(
-                        StringConstant(" 0 ".into()),
-                    ))),
-                    PrintItem::Comma,
-                    PrintItem::Expression(Expression::Numeric(NumericExpression::with_constant(
-                        0.000888,
-                    ))),
-                    PrintItem::Comma,
-                    PrintItem::Expression(Expression::String(StringExpression::Constant(
-                        StringConstant(" 0 ".into()),
-                    ))),
-                    PrintItem::Comma,
-                    PrintItem::Expression(Expression::Numeric(NumericExpression::with_constant(
-                        -1.0,
-                    ))),
-                ],
-            })
-        );
-    }
-
-    #[test]
     fn test_numeric_constant() {
-        let res = numeric_constant(Span::new(CompleteStr("-123456E-29")));
+        let res = numeric_constant("-123456E-29");
         let (remaining, value) = res.expect("failed to parse");
-        let remaining = remaining.fragment;
         assert!(remaining.is_empty(), "Remaing is not empty: {}", remaining);
-        assert_eq!(value, NumericConstant::from((-123456f64, -29)));
+        assert_eq!(value, ast::NumericConstant::from((-123456f64, -29)));
     }
 
     #[test]
-    fn test_data() {
-        let res = data_statement(Span::new(CompleteStr("DATA 5,6,2D3")));
-        let (remaining, _value) = res.expect("failed to parse");
-        let remaining = remaining.fragment;
-        assert!(remaining.is_empty(), "Remaing is not empty: {}", remaining);
+    fn test_end_program() {
+        let res = program("999 END");
+        let program = res.expect("invalid program");
+        assert_eq!(program.blocks.len(), 1);
     }
 
     #[test]
-    fn test_for_block() -> Result<(), Error> {
-        const PROGRAM: &str = r#"100 PRINT "Hello, World!"
-110 FOR I = 0 TO 10 STEP 1
-120 PRINT "Wow!"
-121 PRINT "Wow!"
-130 NEXT I
-140 END
-"#;
+    fn test_variable_exampes() {
+        let (_, v) = variable("X").expect("failed to parse");
+        assert_eq!(
+            v,
+            ast::Variable::Numeric(ast::NumericVariable::Simple(ast::SimpleNumericVariable {
+                letter: 'X',
+                digit: None,
+            })),
+        );
 
-        let res = program(Span::new(CompleteStr(PROGRAM)))?;
-        let (_, program) = res;
-        let program = program?;
-        // A FOR..NEXT-block is replaced by 7 equivalent lines + inner blocks
-        assert_eq!(program.blocks.len(), 1 + 7 + 2 + 1);
-        Ok(())
+        let (_, v) = variable("A5").expect("failed to parse");
+        assert_eq!(
+            v,
+            ast::Variable::Numeric(ast::NumericVariable::Simple(ast::SimpleNumericVariable {
+                letter: 'A',
+                digit: Some(5),
+            })),
+        );
+
+        let (_, v) = variable("S$").expect("failed to parse");
+        assert_eq!(v, ast::Variable::String(ast::StringVariable('S')));
+
+        let (_, v) = variable("C$").expect("failed to parse");
+        assert_eq!(v, ast::Variable::String(ast::StringVariable('C')));
+    }
+
+    #[test]
+    fn test_expression_examples() {
+        expression("3*X - Y^2").expect("failed to parse");
+        expression("A(1)+A(2)+A(3)").expect("failed to parse");
+        expression("2^(-X)").expect("failed to parse");
+        expression("-X/Y").expect("failed to parse");
+        expression("SQR(X^2+Y^2)").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_user_defined_function_examples() {
+        def_statement("DEF FNF(X) = X^4 - 1").expect("failed to parse");
+        def_statement("DEF FNP = 3.14159").expect("failed to parse");
+        def_statement("DEF FNA(X) = A*X + B").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_let_statement_examples() {
+        let_statement("LET P = 3.14159").expect("failed to parse");
+        let_statement("LET A(X,3) = SIN(X)*Y + 1").expect("failed to parse");
+        let_statement("LET A$ = \"ABC\"").expect("failed to parse");
+        let_statement("LET A$ = B$").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_control_statement_examples() {
+        goto_statement("GO TO 999").expect("failed to parse");
+        if_then_statement("IF X > Y+83 THEN 200").expect("failed to parse");
+        if_then_statement("IF A$ <> B$ THEN 550").expect("failed to parse");
+        on_goto_statement("ON L+1 GO TO 300,400,500").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_for_and_next_statement_examples() {
+        for_block("100 FOR I = 1 TO 10\n200 NEXT I\n").expect("failed to parse");
+        for_block("100 FOR I = A TO B STEP -1\n200 NEXT I\n").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_print_statement_examples() {
+        print_statement("PRINT X").expect("failed to parse");
+        print_statement("PRINT X; (Y+Z)/2").expect("failed to parse");
+        print_statement("PRINT").expect("failed to parse");
+        print_statement("PRINT TAB(10); A$; \"IS DONE.\"").expect("failed to parse");
+        print_statement("PRINT \"X EQUALS\", 10").expect("failed to parse");
+        print_statement("PRINT X, Y").expect("failed to parse");
+        print_statement("PRINT ,,,X").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_input_statement_examples() {
+        input_statement("INPUT X").expect("failed to parse");
+        input_statement("INPUT X, A$, Y(2)").expect("failed to parse");
+        input_statement("INPUT A, B, C").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_input_reply_examples() {
+        input_reply("3.14159").expect("failed to parse");
+        input_reply("2,SMITH,-3").expect("failed to parse");
+        input_reply("25,0,-15").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_read_statement_examples() {
+        read_statement("READ X, Y, Z").expect("failed to parse");
+        read_statement("READ X(1), A$, C").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_data_statement_examples() {
+        data_statement("DATA 3.14159, PI, 5E-10, \",\"").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_dimension_statement_examples() {
+        dimension_statement("DIM A(6), B(10, 10)").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_remark_statement_examples() {
+        remark_statement("REMARK FINAL CHECK").expect("failed to parse");
+    }
+
+    #[test]
+    fn test_randomize_statement_examples() {
+        randomize_statement("RANDOMIZE").expect("failed to parse");
     }
 }
