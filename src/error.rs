@@ -1,9 +1,7 @@
-use nom;
-use nom::simple_errors::Context;
-use nom::types::CompleteStr;
-
 use crate::ast::NextLine;
-use crate::parser::{self, Span};
+use crate::parser;
+
+use nom::error::{ErrorKind, ParseError};
 
 use std::convert;
 use std::fmt;
@@ -11,7 +9,10 @@ use std::io;
 
 #[derive(Debug)]
 pub enum Error {
-    Parser(String),
+    Parser {
+        input: String,
+        kind: ErrorKind,
+    },
     StatementsAfterEnd {
         line_numbers: Vec<u16>,
     },
@@ -92,19 +93,20 @@ pub enum Error {
         statement_source: String,
     },
     IoError(io::Error),
+    Remaining(String),
 }
 
-impl<'a> convert::From<nom::Err<Span<'a>>> for Error {
-    fn from(e: nom::Err<Span<'a>>) -> Self {
-        match e {
-            nom::Err::Incomplete(needed) => {
-                Error::Parser(format!("incomplete input: {:?}", needed))
-            }
-            nom::Err::Error(Context::Code(span, _)) => Error::Parser(format!("{}", span.fragment)),
-            nom::Err::Failure(Context::Code(span, _)) => {
-                Error::Parser(format!("{}", span.fragment))
-            }
+impl<'a> ParseError<&'a str> for Error {
+    fn from_error_kind(input: &'a str, kind: ErrorKind) -> Self {
+        Error::Parser {
+            input: input.to_string(),
+            kind,
         }
+    }
+
+    fn append(_input: &'a str, _kind: ErrorKind, other: Self) -> Self {
+        // for now we are only interested in the first error
+        other
     }
 }
 
@@ -117,7 +119,7 @@ impl convert::From<io::Error> for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::Parser(ref s) => write!(f, "Parser error: {}", s),
+            Error::Parser { ref input, .. } => write!(f, "{}", format_remaining(&input)),
             Error::StatementsAfterEnd { ref line_numbers } => {
                 for line_number in line_numbers {
                     writeln!(f, "{}: error: line after an END statement ", line_number)?;
@@ -293,37 +295,39 @@ impl fmt::Display for Error {
                 )
             }
             Error::IoError(ref e) => write!(f, "{}", e),
+            Error::Remaining(ref input) => write!(f, "Parser error; remaining lines: {}", input),
         }
     }
 }
 
-pub fn format_remaining(remaining: &'_ str) -> Result<String, Error> {
+pub fn format_remaining(remaining: &str) -> String {
     let failed_line = remaining.lines().next().unwrap();
-    let failed_span = Span::new(CompleteStr(failed_line));
 
     // special case: unexpected NEXT statement => no corresponding FOR block
-    if let Ok((_, NextLine { line_number, .. })) = parser::next_line(failed_span) {
-        return Ok(format!("{}: error: NEXT without FOR \n", line_number));
+    if let Ok((_, NextLine { line_number, .. })) = parser::next_line(failed_line) {
+        return format!("{}: error: NEXT without FOR \n", line_number);
     }
 
     // general case
     // extract fragment where the parser failed from all possible errors
-    let failed_fragment = match parser::line(failed_span) {
-        Ok((span, _)) => span.fragment,
-        Err(nom::Err::Error(Context::Code(span, _))) => span.fragment,
-        Err(nom::Err::Failure(Context::Code(span, _))) => span.fragment,
-        Err(e) => return Err(Error::from(e)),
+    let res = parser::line(failed_line);
+    let failed_fragment = match res {
+        Ok((remaining, _)) => remaining,
+        Err(nom::Err::Error(Error::Parser { ref input, .. }))
+        | Err(nom::Err::Failure(Error::Parser { ref input, .. })) => input,
+        Err(nom::Err::Incomplete(_)) => unreachable!(),
+        Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => panic!("unexpected error: {}", e),
     };
 
     let mut parts = failed_line.splitn(2, ' ');
     let line_number = parts.next().unwrap();
     let statement = parts.next().unwrap();
-    let failed_pos = statement.find(failed_fragment.as_ref()).unwrap_or(0);
-    Ok(format!(
+    let failed_pos = statement.find(failed_fragment).unwrap_or(0);
+    format!(
         "{}: error: syntax error \n {}\n {:cursor$}^\n",
         line_number,
         statement,
         "",
         cursor = failed_pos + 1
-    ))
+    )
 }
