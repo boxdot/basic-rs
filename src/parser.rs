@@ -6,7 +6,7 @@ use nom::{
     bytes::complete::{tag, take_while, take_while1, take_while_m_n},
     character::complete::{char, one_of, space0, space1},
     combinator::{map, map_res, opt},
-    error::{context},
+    error::context,
     multi::{many0, separated_nonempty_list},
     sequence::{delimited, pair, preceded, terminated, tuple},
     IResult,
@@ -82,7 +82,14 @@ fn remark_string<'a>(i: &'a str) -> IResult<&'a str, &'a str, Error> {
 }
 
 fn quoted_string<'a>(i: &'a str) -> IResult<&'a str, &'a str, Error> {
-    context("invalid char", delimited(quotation_mark, take_while(is_quoted_string_character), quotation_mark))(i)
+    context(
+        "invalid char",
+        delimited(
+            quotation_mark,
+            take_while(is_quoted_string_character),
+            quotation_mark,
+        ),
+    )(i)
 }
 
 fn unquoted_string<'a>(i: &'a str) -> IResult<&'a str, &'a str, Error> {
