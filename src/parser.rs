@@ -384,10 +384,11 @@ fn argument_list<'a>(i: &'a str) -> IResult<&'a str, ast::NumericExpression, Err
 }
 
 fn string_expression<'a>(i: &'a str) -> IResult<&'a str, ast::StringExpression, Error> {
+    context("string expression",
     alt((
         map(string_variable, ast::StringExpression::Variable),
         map(string_constant, ast::StringExpression::Constant),
-    ))(i)
+    )))(i)
 }
 
 // 9. Implementation supplied functions
