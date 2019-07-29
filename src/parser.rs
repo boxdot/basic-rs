@@ -5,7 +5,8 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1, take_while_m_n},
     character::complete::{char, one_of, space0, space1},
-    combinator::{map, map_res, opt},
+    combinator::{cut, map, map_res, opt},
+    error::context,
     multi::{many0, separated_nonempty_list},
     sequence::{delimited, pair, preceded, terminated, tuple},
     IResult,
@@ -36,7 +37,7 @@ fn letter<'a>(i: &'a str) -> IResult<&'a str, char, Error> {
 fn is_letter(c: char) -> bool {
     match c {
         'A'..='Z' => true,
-        'a'..='z' => true,
+        //'a'..='z' => true,
         _ => false,
     }
 }
@@ -81,10 +82,15 @@ fn remark_string<'a>(i: &'a str) -> IResult<&'a str, &'a str, Error> {
 }
 
 fn quoted_string<'a>(i: &'a str) -> IResult<&'a str, &'a str, Error> {
-    preceded(
-        quotation_mark,
-        terminated(take_while(is_quoted_string_character), quotation_mark),
-    )(i)
+    cut(
+    context(
+        "invalid char",
+        delimited(
+            quotation_mark,
+            take_while(is_quoted_string_character),
+            quotation_mark,
+        ),
+    ))(i)
 }
 
 fn unquoted_string<'a>(i: &'a str) -> IResult<&'a str, &'a str, Error> {
@@ -379,10 +385,11 @@ fn argument_list<'a>(i: &'a str) -> IResult<&'a str, ast::NumericExpression, Err
 }
 
 fn string_expression<'a>(i: &'a str) -> IResult<&'a str, ast::StringExpression, Error> {
+    context("string expression",
     alt((
         map(string_variable, ast::StringExpression::Variable),
         map(string_constant, ast::StringExpression::Constant),
-    ))(i)
+    )))(i)
 }
 
 // 9. Implementation supplied functions
@@ -802,7 +809,7 @@ mod tests {
     }
 
     #[test]
-    fn test_variable_exampes() {
+    fn test_variable_examples() {
         let (_, v) = variable("X").expect("failed to parse");
         assert_eq!(
             v,

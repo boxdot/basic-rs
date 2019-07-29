@@ -11,6 +11,7 @@ use std::io;
 pub enum Error {
     Parser {
         input: String,
+        context: String,
         kind: ErrorKind,
     },
     StatementsAfterEnd {
@@ -100,6 +101,7 @@ impl<'a> ParseError<&'a str> for Error {
     fn from_error_kind(input: &'a str, kind: ErrorKind) -> Self {
         Error::Parser {
             input: input.to_string(),
+            context: String::new(),
             kind,
         }
     }
@@ -107,6 +109,18 @@ impl<'a> ParseError<&'a str> for Error {
     fn append(_input: &'a str, _kind: ErrorKind, other: Self) -> Self {
         // for now we are only interested in the first error
         other
+    }
+
+    fn add_context(_input: &'a str, _ctx: &'static str, other: Self) -> Self {
+        if let Error::Parser { input, kind, .. } = other {
+            Error::Parser {
+                input,
+                context: String::from(_ctx),
+                kind,
+            }
+        } else {
+            other
+        }
     }
 }
 
@@ -119,7 +133,11 @@ impl convert::From<io::Error> for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::Parser { ref input, .. } => write!(f, "{}", format_remaining(&input)),
+            Error::Parser {
+                ref input,
+                ref context,
+                ..
+            } => write!(f, "{}: {}", context, format_remaining(&input)),
             Error::StatementsAfterEnd { ref line_numbers } => {
                 for line_number in line_numbers {
                     writeln!(f, "{}: error: line after an END statement ", line_number)?;

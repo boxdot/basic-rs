@@ -451,7 +451,11 @@ impl<'a> Interpreter<'a> {
             if acc == 0.0 && primary < 0f64 {
                 self.warn(
                     stderr,
-                    &format!("zero raised to negative value ({} ^ {})", acc, format_float(primary).trim()),
+                    &format!(
+                        "zero raised to negative value ({} ^ {})",
+                        acc,
+                        format_float(primary).trim()
+                    ),
                 )?;
             } else if res.is_infinite() {
                 self.warn(stderr, "operation overflow")?;

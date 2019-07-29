@@ -380,7 +380,7 @@ try_test_program!(P201);
 test_program!(P202);
 try_test_program!(P203);
 try_test_program!(P204);
-try_test_program!(P205);
+test_program!(P205);
 try_test_program!(P206);
 try_test_program!(P207);
 try_test_program!(P208);
